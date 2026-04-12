@@ -1,3 +1,4 @@
+import { TaskDetailActions } from "@/components/TaskDetailActions";
 import { fetchTask } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,13 @@ export default async function TaskDetailPage({ params }: { params: Promise<{ id:
       </p>
       <p className="leading-relaxed">{String(task.instructions)}</p>
       <p className="text-xs text-[var(--muted)]">Task ID: {String(task.task_id)}</p>
+      <TaskDetailActions
+        task={{
+          task_id: String(task.task_id),
+          status: String(task.status),
+          title: task.title != null ? String(task.title) : undefined,
+        }}
+      />
     </div>
   );
 }

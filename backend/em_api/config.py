@@ -22,6 +22,9 @@ class Settings(BaseSettings):
 
     world_id_app_id: str = ""
     world_id_action: str = "register-executor"
+    world_id_rp_id: str = ""
+    world_id_orb_bounty_threshold_micros: int = 5_000_000
+    world_id_accept_enforce: bool = True
 
     x402_facilitator_url: str = ""
     x402_enforce: bool = False

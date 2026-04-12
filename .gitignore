@@ -28,6 +28,8 @@ broadcast/
 contracts/cache/
 contracts/out/
 contracts/broadcast/
+# Generated Standard JSON for manual explorer verification
+contracts/verification-standard-json/
 contracts/lib/
 # Logs
 *.log

@@ -23,3 +23,23 @@ cd ../scripts && npm install && npm run deploy-contracts
 ```
 
 Addresses are written to `../.contracts.env`.
+
+## Verify on opBNBScan (Etherscan API v2)
+
+Use a unified key from [etherscan.io/apis](https://etherscan.io/apis) and **chain id 5611**:
+
+```bash
+export ETHERSCAN_API_KEY=...
+forge verify-contract <ADDRESS> src/YourContract.sol:YourContract \
+  --chain opbnb-testnet \
+  --verifier etherscan \
+  --verifier-url "https://api.etherscan.io/v2/api?chainid=5611" \
+  --etherscan-api-key "$ETHERSCAN_API_KEY" \
+  --compiler-version "v0.8.24+commit.e11b9ed9" \
+  --via-ir \
+  --watch
+```
+
+If the API responds with `General exception occured when attempting to insert record`, that is a **server-side explorer error**—retry later or verify manually: run the same command with `--show-standard-json-input > verify.json` and upload **Solidity Standard JSON** on [testnet.opbnbscan.com](https://testnet.opbnbscan.com).
+
+Evidence / local SSL: `python3 ../scripts/debug_contract_verify_evidence.py` (writes `../.cursor/debug-767189.log`). If Python reports `CERTIFICATE_VERIFY_FAILED`, run `pip install certifi` or macOS **Install Certificates.command** for your Python.

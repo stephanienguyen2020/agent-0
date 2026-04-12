@@ -12,6 +12,9 @@ fs_permissions = [{ access = "read", path = "./" }]
 opbnb_testnet = "https://opbnb-testnet-rpc.bnbchain.org"
 bsc_testnet = "https://data-seed-prebsc-1-s1.bnbchain.org:8545"
 
+# Explorer: deploy does not need a key. For `forge verify-contract` use Etherscan API V2 + a key from
+# https://etherscan.io/apis (works across supported chains; legacy per-explorer V1 URLs are deprecated).
+# Example: --verifier-url "https://api.etherscan.io/v2/api?chainid=5611" for opBNB Testnet (5611).
 [etherscan]
-opbnb_testnet = { key = "${OPBNB_API_KEY}", url = "https://api-opbnb-testnet.bscscan.com/api" }
-bsc_testnet = { key = "${BSC_API_KEY}", url = "https://api-testnet.bscscan.com/api" }
+opbnb_testnet = { key = "", url = "https://api.etherscan.io/v2/api?chainid=5611" }
+bsc_testnet = { key = "", url = "https://api.etherscan.io/v2/api?chainid=97" }

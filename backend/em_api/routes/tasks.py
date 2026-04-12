@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import mimetypes
 import tempfile
 import uuid
 from datetime import datetime, timezone
@@ -20,6 +21,7 @@ from em_api.services.greenfield import (
     public_url_for_dev,
     upload_file_via_greenfield_script,
 )
+from em_api.services.verification import run_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -153,12 +155,43 @@ def create_task(body: TaskCreate, chain=Depends(get_chain)) -> dict:
     return {"task_id": task_id, "on_chain_tx_publish": tx_hash}
 
 
+def _executor_world_id_level(supa, executor_id: str) -> str | None:
+    r = supa.table("executors").select("verification_level").eq("id", executor_id).single().execute()
+    if not r.data:
+        return None
+    v = r.data.get("verification_level")
+    if v is None:
+        return None
+    s = str(v).lower()
+    if s in ("", "none"):
+        return None
+    return s
+
+
 @router.post("/{task_id}/accept")
 def accept_task(task_id: str, body: TaskAcceptBody, chain=Depends(get_chain)) -> dict:
     supa = get_supabase()
     if not supa:
         raise HTTPException(503, "Supabase not configured")
+    tr = supa.table("tasks").select("*").eq("task_id", task_id).single().execute()
+    if not tr.data:
+        raise HTTPException(404, "task not found")
+    task_row = tr.data
+    bounty_micros = int(task_row.get("bounty_micros") or 0)
+
     ex_id = _ensure_executor(supa, body.executor_wallet, body.executor_erc8004_id)
+    if settings.world_id_accept_enforce:
+        level = _executor_world_id_level(supa, ex_id)
+        if not level:
+            raise HTTPException(
+                403,
+                "World ID verification required before accepting tasks (complete /register)",
+            )
+        if bounty_micros >= settings.world_id_orb_bounty_threshold_micros and level != "orb":
+            raise HTTPException(
+                403,
+                f"Bounty ≥ ${settings.world_id_orb_bounty_threshold_micros // 1_000_000} USDC requires Orb verification",
+            )
     tx = chain.accept_task(task_id, body.executor_wallet, body.executor_erc8004_id)
     now = datetime.now(timezone.utc).isoformat()
     supa.table("tasks").update(
@@ -258,6 +291,39 @@ async def submit_task(
         .execute()
     )
     evidence_id = ev.data[0]["id"]
+
+    if file is not None:
+        ct = file.content_type or mimetypes.guess_type(fn)[0] or "application/octet-stream"
+        supa.table("evidence_items").insert(
+            {
+                "evidence_id": evidence_id,
+                "item_index": 0,
+                "filename": fn,
+                "content_type": ct,
+                "size_bytes": len(data),
+                "sha256": sha_hex[2:] if sha_hex.startswith("0x") else sha_hex,
+                "greenfield_url": ev_payload.get("photo_urls", [url])[0],
+            }
+        ).execute()
+    else:
+        photo_urls = ev_payload.get("photo_urls") or []
+        doc_url = ev_payload.get("document_url")
+        urls = photo_urls if photo_urls else ([doc_url] if doc_url else [])
+        for i, u in enumerate(urls):
+            if not u:
+                continue
+            supa.table("evidence_items").insert(
+                {
+                    "evidence_id": evidence_id,
+                    "item_index": i,
+                    "filename": f"evidence_{i}",
+                    "content_type": "application/octet-stream",
+                    "size_bytes": 0,
+                    "sha256": sha_hex[2:] if sha_hex.startswith("0x") else sha_hex,
+                    "greenfield_url": str(u),
+                }
+            ).execute()
+
     supa.table("tasks").update(
         {"status": "submitted", "submitted_at": datetime.now(timezone.utc).isoformat(), "on_chain_tx_submit": tx}
     ).eq("task_id", task_id).execute()
@@ -265,12 +331,57 @@ async def submit_task(
     return {"task_id": task_id, "evidence_id": evidence_id, "on_chain_tx_submit": tx}
 
 
+def _evidence_dict_from_items(category: str, items: list[dict]) -> dict[str, Any]:
+    ordered = sorted(items, key=lambda x: int(x.get("item_index", 0)))
+    urls = [str(it.get("greenfield_url", "")) for it in ordered if it.get("greenfield_url")]
+    if category == "knowledge_access":
+        return {"document_url": urls[0] if urls else None}
+    return {"photo_urls": urls, "gps_lat": None, "gps_lng": None}
+
+
 @router.post("/{task_id}/verify")
 def verify_task(task_id: str, chain=Depends(get_chain)) -> dict:
-    """Auto-pass L1/L2 for MVP: mark verified on-chain and update DB."""
+    """Run verifier pipeline (L1 + optional Gemini L2); on success settle on-chain."""
     supa = get_supabase()
     if not supa:
         raise HTTPException(503, "Supabase not configured")
+    tr = supa.table("tasks").select("*").eq("task_id", task_id).single().execute()
+    if not tr.data:
+        raise HTTPException(404, "task not found")
+    task = tr.data
+    category = task["category"]
+
+    ev_row = (
+        supa.table("evidence")
+        .select("id")
+        .eq("task_id", task_id)
+        .order("submitted_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if not ev_row.data:
+        raise HTTPException(400, "no evidence to verify")
+    evidence_id = ev_row.data[0]["id"]
+    items_r = supa.table("evidence_items").select("*").eq("evidence_id", evidence_id).execute()
+    items = items_r.data or []
+    ev_dict = _evidence_dict_from_items(category, items)
+
+    gemini_key = settings.gemini_api_key.strip() if settings.gemini_api_key else None
+    pipeline = run_pipeline(category, ev_dict, gemini_key)
+    if not pipeline.passed:
+        supa.table("verifications").insert(
+            {
+                "task_id": task_id,
+                "evidence_id": evidence_id,
+                "level": pipeline.final_level,
+                "passed": False,
+                "confidence": None,
+                "reason": pipeline.reason,
+                "raw": pipeline.details,
+            }
+        ).execute()
+        raise HTTPException(422, f"verification failed: {pipeline.reason}")
+
     txv = chain.mark_verified(task_id)
     txr = chain.release(task_id)
     now = datetime.now(timezone.utc).isoformat()
@@ -282,14 +393,21 @@ def verify_task(task_id: str, chain=Depends(get_chain)) -> dict:
             "on_chain_tx_release": txr,
         }
     ).eq("task_id", task_id).execute()
+    level_db = pipeline.final_level if pipeline.final_level in (
+        "l1_auto",
+        "l2_ai",
+        "l3_agent",
+        "l4_arbitration",
+    ) else "l2_ai"
     supa.table("verifications").insert(
         {
             "task_id": task_id,
-            "level": "l1_auto",
+            "evidence_id": evidence_id,
+            "level": level_db,
             "passed": True,
             "confidence": 1.0,
-            "reason": "auto-pass (MVP)",
-            "raw": {},
+            "reason": pipeline.reason,
+            "raw": pipeline.details,
         }
     ).execute()
     return {"task_id": task_id, "on_chain_tx_verify": txv, "on_chain_tx_release": txr}

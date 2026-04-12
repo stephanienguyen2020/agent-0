@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Frontend: **Privy** + `@privy-io/wagmi` + TanStack Query, opBNB Testnet chain helper, header wallet controls, task detail **accept / multipart submit / verify** actions against FastAPI.
+- World ID: IDKit v4 **IDKitRequestWidget** on `/register`, Next.js `POST /api/world-id/rp-context` (RP signing), backend verify forwards to World Developer API (v4 or legacy v2) and optional `signal_hash` check.
+- Backend: World ID **accept gating** (device minimum; Orb for bounties ≥ threshold µUSDC); `WORLD_ID_ACCEPT_ENFORCE` to disable for local demos; `evidence_items` rows on submit; **`POST /tasks/{id}/verify`** runs verifier **pipeline** + real **Gemini 2.0 Flash** when `GEMINI_API_KEY` is set.
+- `em_api.services.world_id_signal` (IDKit-compatible signal digest) and `em_api.services.verification` (repo-root `verifier` import).
 - Initial monorepo skeleton: `contracts/` (Foundry), `frontend/` (Next.js 15), `backend/` (FastAPI), `agents/`, `irc/`, `facilitator/`, `scripts/`, `supabase/migrations/`.
 - Root `.env.example` documenting configuration variables.
 - Cursor rule to keep `docs/05-implementation-plan.md` progress and `CHANGELOG.md` updated.
@@ -25,6 +29,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Renamed `docs/02-technical-architecture (1).md` to `docs/02-technical-architecture.md` for consistent cross-links.
 - World ID default action id set to `register-executor` (backend default + `.env.example`); added `frontend/.env.example`.
+- Frontend wallet stack: **Privy** (per sprint plan); optional peers `@metamask/connect-evm`, `@farcaster/mini-app-solana` for Next bundle resolution.
+- Docs `09` / `05`: note Privy + World ID v4 env (RP ID + signing key).
 
 ### Fixed
 
