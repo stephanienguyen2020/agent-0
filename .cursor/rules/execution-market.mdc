@@ -1,0 +1,15 @@
+---
+description: Execution Market — progress tracking and changelog discipline
+globs:
+alwaysApply: true
+---
+
+# Execution Market implementation rules
+
+After any substantive implementation work (features, fixes, contract deploys, env/API breaks):
+
+1. **Update** [docs/05-implementation-plan.md](docs/05-implementation-plan.md) — edit the **Implementation progress** section at the top: current phase, per-phase checkboxes, blockers/notes.
+2. **Update** [CHANGELOG.md](CHANGELOG.md) — add entries under `## [Unreleased]` using Keep a Changelog categories (`Added`, `Changed`, `Fixed`, `Security`). Summarize user-visible or operator-visible changes; note new contract addresses and breaking env/API changes under `Changed`.
+3. When cutting a release, move `Unreleased` into a dated version section (e.g. `## [0.1.0] - YYYY-MM-DD`).
+
+Do not remove the original phase specifications in `05`; only maintain the progress rollup and checklists.

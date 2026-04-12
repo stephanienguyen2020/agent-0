@@ -1,0 +1,7 @@
+# Federation peer — placeholder
+network:
+  name: em-irc-west
+
+server:
+  listen:
+    - ":6667"

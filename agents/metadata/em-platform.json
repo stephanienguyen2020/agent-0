@@ -1,0 +1,5 @@
+{
+  "name": "Execution Market Platform",
+  "description": "Universal execution layer orchestrator",
+  "capabilities": ["tasks.publish", "tasks.settle", "irc.relay"]
+}

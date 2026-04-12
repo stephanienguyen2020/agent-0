@@ -1,0 +1,23 @@
+{
+  "name": "execution-market-scripts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy-contracts": "tsx deploy-contracts.ts",
+    "seed-demo": "tsx seed-demo.ts",
+    "setup-greenfield-buckets": "tsx setup-greenfield-buckets.ts",
+    "upload-greenfield": "tsx upload-greenfield.ts"
+  },
+  "dependencies": {
+    "@bnb-chain/greenfield-js-sdk": "^2.2.0",
+    "@bnb-chain/reed-solomon": "^1.0.0",
+    "dotenv": "^16.4.0",
+    "mime-types": "^2.1.35",
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "@types/mime-types": "^2.1.4",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

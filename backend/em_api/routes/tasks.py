@@ -1,0 +1,306 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+import tempfile
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from pydantic import BaseModel, Field
+
+from em_api.config import settings
+from em_api.deps import get_chain, get_supabase
+from em_api.services.evidence_schemas import validate_evidence
+from em_api.services.greenfield import (
+    local_placeholder_upload,
+    public_url_for_dev,
+    upload_file_via_greenfield_script,
+)
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
+
+FEE_BPS = 1300
+
+
+class TaskCreate(BaseModel):
+    requester_wallet: str
+    requester_erc8004_id: int = 0
+    title: str
+    instructions: str
+    category: str
+    bounty_micros: int = Field(gt=0)
+    deadline_at: datetime
+    evidence_schema: dict[str, Any] = Field(default_factory=dict)
+    executor_requirements: dict[str, Any] = Field(default_factory=dict)
+    location_lat: float | None = None
+    location_lng: float | None = None
+    location_radius_m: int | None = None
+
+
+class TaskAcceptBody(BaseModel):
+    executor_wallet: str
+    executor_erc8004_id: int = 0
+
+
+class TaskSubmitBody(BaseModel):
+    evidence: dict[str, Any]
+    filename: str = "evidence.bin"
+
+
+def _fee_micros(bounty: int) -> int:
+    return bounty * FEE_BPS // 10_000
+
+
+def _ensure_agent(supa, wallet: str, erc_id: int) -> str:
+    w = wallet.lower()
+    r = supa.table("agents").select("id").eq("wallet", w).limit(1).execute()
+    if r.data:
+        return r.data[0]["id"]
+    ins = (
+        supa.table("agents")
+        .insert(
+            {
+                "wallet": w,
+                "erc8004_agent_id": erc_id,
+                "display_name": w[:10],
+                "type": "ai_agent",
+            }
+        )
+        .execute()
+    )
+    return ins.data[0]["id"]
+
+
+def _ensure_executor(supa, wallet: str, erc_id: int) -> str:
+    w = wallet.lower()
+    r = supa.table("executors").select("id").eq("wallet", w).limit(1).execute()
+    if r.data:
+        return r.data[0]["id"]
+    ins = (
+        supa.table("executors")
+        .insert(
+            {
+                "wallet": w,
+                "erc8004_agent_id": erc_id,
+                "type": "human",
+                "display_name": w[:10],
+            }
+        )
+        .execute()
+    )
+    return ins.data[0]["id"]
+
+
+@router.get("")
+def list_tasks(status: str | None = None) -> dict:
+    supa = get_supabase()
+    if not supa:
+        raise HTTPException(503, "Supabase not configured")
+    q = supa.table("tasks").select("*")
+    if status:
+        q = q.eq("status", status)
+    rows = q.order("created_at", desc=True).limit(100).execute()
+    return {"tasks": rows.data}
+
+
+@router.post("")
+def create_task(body: TaskCreate, chain=Depends(get_chain)) -> dict:
+    supa = get_supabase()
+    if not supa:
+        raise HTTPException(503, "Supabase not configured")
+    agent_id = _ensure_agent(supa, body.requester_wallet, body.requester_erc8004_id)
+    task_id = "tk_" + uuid.uuid4().hex
+    fee = _fee_micros(body.bounty_micros)
+    deadline = body.deadline_at
+    if deadline.tzinfo is None:
+        deadline = deadline.replace(tzinfo=timezone.utc)
+    deadline_unix = int(deadline.timestamp())
+
+    tx_hash = chain.publish_task(
+        task_id,
+        body.requester_wallet,
+        body.requester_erc8004_id,
+        body.category,
+        body.bounty_micros,
+        deadline_unix,
+    )
+
+    row = {
+        "task_id": task_id,
+        "agent_id": agent_id,
+        "category": body.category,
+        "title": body.title,
+        "instructions": body.instructions,
+        "bounty_micros": str(body.bounty_micros),
+        "fee_micros": str(fee),
+        "status": "published",
+        "deadline_at": deadline.isoformat(),
+        "evidence_schema": body.evidence_schema,
+        "executor_requirements": body.executor_requirements,
+        "location_lat": body.location_lat,
+        "location_lng": body.location_lng,
+        "location_radius_m": body.location_radius_m,
+        "on_chain_tx_publish": tx_hash,
+        "on_chain_task_id": task_id,
+    }
+    supa.table("tasks").insert(row).execute()
+    return {"task_id": task_id, "on_chain_tx_publish": tx_hash}
+
+
+@router.post("/{task_id}/accept")
+def accept_task(task_id: str, body: TaskAcceptBody, chain=Depends(get_chain)) -> dict:
+    supa = get_supabase()
+    if not supa:
+        raise HTTPException(503, "Supabase not configured")
+    ex_id = _ensure_executor(supa, body.executor_wallet, body.executor_erc8004_id)
+    tx = chain.accept_task(task_id, body.executor_wallet, body.executor_erc8004_id)
+    now = datetime.now(timezone.utc).isoformat()
+    supa.table("tasks").update(
+        {
+            "executor_id": ex_id,
+            "status": "accepted",
+            "accepted_at": now,
+            "on_chain_tx_accept": tx,
+        }
+    ).eq("task_id", task_id).execute()
+    return {"task_id": task_id, "on_chain_tx_accept": tx}
+
+
+@router.post("/{task_id}/submit")
+async def submit_task(
+    task_id: str,
+    evidence: str | None = None,
+    file: UploadFile | None = File(None),
+    chain=Depends(get_chain),
+) -> dict:
+    """Submit JSON evidence as form field `evidence` or upload a file."""
+    supa = get_supabase()
+    if not supa:
+        raise HTTPException(503, "Supabase not configured")
+    tr = supa.table("tasks").select("*").eq("task_id", task_id).single().execute()
+    if not tr.data:
+        raise HTTPException(404, "task not found")
+    task = tr.data
+    category = task["category"]
+
+    if file is not None:
+        data = await file.read()
+        fn = file.filename or "upload"
+        sha_hex = "0x" + hashlib.sha256(data).hexdigest()
+        url: str
+        stored_bucket = "local"
+
+        if settings.use_greenfield_upload:
+            suffix = Path(fn).suffix or ".bin"
+            tmp_path: Path | None = None
+            try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                    tmp.write(data)
+                    tmp_path = Path(tmp.name)
+                gf = upload_file_via_greenfield_script(
+                    tmp_path, task_id, bucket=settings.greenfield_bucket
+                )
+                url = gf["url"]
+                sha_hex = gf.get("sha256", sha_hex)
+                stored_bucket = settings.greenfield_bucket
+            except Exception as e:
+                logger.warning("Greenfield upload failed, using local placeholder: %s", e)
+                url, _ = local_placeholder_upload(task_id, fn, data)
+                stored_bucket = "local"
+            finally:
+                if tmp_path is not None:
+                    tmp_path.unlink(missing_ok=True)
+        else:
+            url, _ = local_placeholder_upload(task_id, fn, data)
+            stored_bucket = "local"
+
+        ev_payload = {"photo_urls": [url], "gps_lat": None, "gps_lng": None}
+    else:
+        if not evidence:
+            raise HTTPException(422, "evidence JSON or file required")
+        try:
+            ev_payload = json.loads(evidence)
+        except json.JSONDecodeError as e:
+            raise HTTPException(422, f"invalid evidence json: {e}") from e
+        canon = json.dumps(ev_payload, sort_keys=True).encode()
+        sha_hex = "0x" + hashlib.sha256(canon).hexdigest()
+        url = public_url_for_dev(sha_hex)
+        stored_bucket = "placeholder"
+
+    try:
+        validate_evidence(category, ev_payload)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+
+    executor_id = task.get("executor_id")
+    if not executor_id:
+        raise HTTPException(400, "task not accepted")
+
+    tx = chain.submit_evidence(task_id, sha_hex, url)
+
+    ev = (
+        supa.table("evidence")
+        .insert(
+            {
+                "task_id": task_id,
+                "executor_id": executor_id,
+                "aggregate_sha256": sha_hex,
+                "greenfield_bucket": stored_bucket,
+                "on_chain_tx_submit": tx,
+            }
+        )
+        .execute()
+    )
+    evidence_id = ev.data[0]["id"]
+    supa.table("tasks").update(
+        {"status": "submitted", "submitted_at": datetime.now(timezone.utc).isoformat(), "on_chain_tx_submit": tx}
+    ).eq("task_id", task_id).execute()
+
+    return {"task_id": task_id, "evidence_id": evidence_id, "on_chain_tx_submit": tx}
+
+
+@router.post("/{task_id}/verify")
+def verify_task(task_id: str, chain=Depends(get_chain)) -> dict:
+    """Auto-pass L1/L2 for MVP: mark verified on-chain and update DB."""
+    supa = get_supabase()
+    if not supa:
+        raise HTTPException(503, "Supabase not configured")
+    txv = chain.mark_verified(task_id)
+    txr = chain.release(task_id)
+    now = datetime.now(timezone.utc).isoformat()
+    supa.table("tasks").update(
+        {
+            "status": "completed",
+            "verified_at": now,
+            "settled_at": now,
+            "on_chain_tx_release": txr,
+        }
+    ).eq("task_id", task_id).execute()
+    supa.table("verifications").insert(
+        {
+            "task_id": task_id,
+            "level": "l1_auto",
+            "passed": True,
+            "confidence": 1.0,
+            "reason": "auto-pass (MVP)",
+            "raw": {},
+        }
+    ).execute()
+    return {"task_id": task_id, "on_chain_tx_verify": txv, "on_chain_tx_release": txr}
+
+
+@router.get("/{task_id}")
+def get_task(task_id: str) -> dict:
+    supa = get_supabase()
+    if not supa:
+        raise HTTPException(503, "Supabase not configured")
+    r = supa.table("tasks").select("*").eq("task_id", task_id).single().execute()
+    if not r.data:
+        raise HTTPException(404, "task not found")
+    return r.data
