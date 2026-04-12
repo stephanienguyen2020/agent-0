@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "info"
     cors_origins: str = "http://localhost:3000"
+    backend_public_url: str = "http://localhost:8000"
 
     supabase_url: str = ""
     supabase_service_role_key: str = ""

@@ -54,6 +54,9 @@ contract EMEscrow is AccessControl, ReentrancyGuard, Pausable {
     address public treasury;
     uint16 public feeBps;
 
+    /// @notice USDC notionally locked for non-terminal tasks (bounty + fee per task).
+    uint256 public totalUSDCCommitted;
+
     mapping(bytes32 => Task) public tasks;
 
     event TaskPublished(
@@ -80,6 +83,7 @@ contract EMEscrow is AccessControl, ReentrancyGuard, Pausable {
     error DeadlinePassed();
     error InvalidExecutor();
     error InvalidFee();
+    error InsufficientFreeUSDC();
 
     constructor(address _usdc, address _emAgent, address _treasury, uint16 _feeBps, address _admin) {
         require(_feeBps <= 5000, "fee > 50%");
@@ -106,6 +110,44 @@ contract EMEscrow is AccessControl, ReentrancyGuard, Pausable {
         uint256 total = bounty + fee;
 
         usdc.safeTransferFrom(agent, address(this), total);
+        totalUSDCCommitted += total;
+
+        tasks[taskId] = Task({
+            taskId: taskId,
+            agent: agent,
+            agentErc8004Id: agentErc8004Id,
+            executor: address(0),
+            executorErc8004Id: 0,
+            category: category,
+            bounty: bounty,
+            platformFee: fee,
+            deadline: deadline,
+            status: TaskStatus.Published,
+            evidenceHash: bytes32(0),
+            evidenceURI: ""
+        });
+
+        emit TaskPublished(taskId, agent, agentErc8004Id, category, bounty, deadline);
+    }
+
+    /// @notice Same as publishTask but USDC is already in this contract (e.g. EIP-3009 x402 settle to escrow).
+    function publishTaskX402(
+        bytes32 taskId,
+        address agent,
+        uint256 agentErc8004Id,
+        Category category,
+        uint256 bounty,
+        uint64 deadline
+    ) external nonReentrant whenNotPaused onlyRole(EM_AGENT_ROLE) {
+        if (tasks[taskId].status != TaskStatus.None) revert TaskAlreadyExists();
+        if (deadline <= block.timestamp) revert DeadlinePassed();
+
+        uint256 fee = (bounty * feeBps) / 10_000;
+        uint256 total = bounty + fee;
+
+        if (usdc.balanceOf(address(this)) < totalUSDCCommitted + total) revert InsufficientFreeUSDC();
+
+        totalUSDCCommitted += total;
 
         tasks[taskId] = Task({
             taskId: taskId,
@@ -169,6 +211,7 @@ contract EMEscrow is AccessControl, ReentrancyGuard, Pausable {
         if (t.status != TaskStatus.Verified) revert InvalidStatus(TaskStatus.Verified, t.status);
 
         t.status = TaskStatus.Completed;
+        totalUSDCCommitted -= t.bounty + t.platformFee;
         usdc.safeTransfer(t.executor, t.bounty);
         usdc.safeTransfer(treasury, t.platformFee);
 
@@ -195,11 +238,13 @@ contract EMEscrow is AccessControl, ReentrancyGuard, Pausable {
 
         if (executorWins) {
             t.status = TaskStatus.Completed;
+            totalUSDCCommitted -= t.bounty + t.platformFee;
             usdc.safeTransfer(t.executor, t.bounty);
             usdc.safeTransfer(treasury, t.platformFee);
             emit TaskCompleted(taskId, t.bounty, t.platformFee);
         } else {
             t.status = TaskStatus.Refunded;
+            totalUSDCCommitted -= t.bounty + t.platformFee;
             usdc.safeTransfer(t.agent, t.bounty + t.platformFee);
             emit TaskRefunded(taskId);
         }
@@ -211,6 +256,7 @@ contract EMEscrow is AccessControl, ReentrancyGuard, Pausable {
         require(block.timestamp >= t.deadline, "not yet expired");
 
         t.status = TaskStatus.Expired;
+        totalUSDCCommitted -= t.bounty + t.platformFee;
         usdc.safeTransfer(t.agent, t.bounty + t.platformFee);
         emit TaskExpired(taskId);
         emit TaskRefunded(taskId);
@@ -221,6 +267,7 @@ contract EMEscrow is AccessControl, ReentrancyGuard, Pausable {
         if (t.status != TaskStatus.Published) revert InvalidStatus(TaskStatus.Published, t.status);
 
         t.status = TaskStatus.Refunded;
+        totalUSDCCommitted -= t.bounty + t.platformFee;
         usdc.safeTransfer(t.agent, t.bounty + t.platformFee);
         emit TaskRefunded(taskId);
     }

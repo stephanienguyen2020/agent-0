@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **x402 (EIP-3009):** Python facilitator service in `facilitator/` (`POST /verify`, `POST /settle`, `GET /healthz`) with Dockerfile; backend `em_api.services.x402_signer`, `x402_facilitator`, `X402_ENFORCE` + dynamic 402 amounts on `POST /api/v1/tasks`, base64 `X-PAYMENT` validation and settle-before-publish flow.
+- **EMEscrow:** `publishTaskX402` and `totalUSDCCommitted` accounting so USDC can arrive via EIP-3009 to the escrow before task creation (paired with x402 settle).
 - Frontend: **Privy** + `@privy-io/wagmi` + TanStack Query, opBNB Testnet chain helper, header wallet controls, task detail **accept / multipart submit / verify** actions against FastAPI.
 - World ID: IDKit v4 **IDKitRequestWidget** on `/register`, Next.js `POST /api/world-id/rp-context` (RP signing), backend verify forwards to World Developer API (v4 or legacy v2) and optional `signal_hash` check.
 - Backend: World ID **accept gating** (device minimum; Orb for bounties ≥ threshold µUSDC); `WORLD_ID_ACCEPT_ENFORCE` to disable for local demos; `evidence_items` rows on submit; **`POST /tasks/{id}/verify`** runs verifier **pipeline** + real **Gemini 2.0 Flash** when `GEMINI_API_KEY` is set.
@@ -27,6 +29,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Contracts:** Redeploy **EMEscrow** required to pick up `publishTaskX402` / `totalUSDCCommitted` (existing `publishTask` unchanged for callers but updates committed balance tracking).
+- **Backend:** `BACKEND_PUBLIC_URL` / `backend_public_url` for x402 `resource` in 402 responses; `eth-account` dependency for EIP-712 signing helpers.
 - Renamed `docs/02-technical-architecture (1).md` to `docs/02-technical-architecture.md` for consistent cross-links.
 - World ID default action id set to `register-executor` (backend default + `.env.example`); added `frontend/.env.example`.
 - Frontend wallet stack: **Privy** (per sprint plan); optional peers `@metamask/connect-evm`, `@farcaster/mini-app-solana` for Next bundle resolution.

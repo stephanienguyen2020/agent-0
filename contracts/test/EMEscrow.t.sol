@@ -97,4 +97,23 @@ contract EMEscrowTest is Test {
         EMEscrow.Task memory t = escrow.getTask(taskId);
         assertEq(t.platformFee, uint256(bounty) * 1300 / 10000);
     }
+
+    function test_publishTaskX402_afterPrefund() public {
+        bytes32 taskId = keccak256("x402-task");
+        uint256 bounty = 40e6;
+        uint256 fee = bounty * 1300 / 10_000;
+        uint256 total = bounty + fee;
+
+        vm.prank(agent);
+        usdc.transfer(address(escrow), total);
+
+        vm.prank(emAgent);
+        escrow.publishTaskX402(
+            taskId, agent, 9, EMEscrow.Category.PhysicalPresence, bounty, uint64(block.timestamp + 1 hours)
+        );
+
+        EMEscrow.Task memory t = escrow.getTask(taskId);
+        assertEq(uint256(t.status), uint256(EMEscrow.TaskStatus.Published));
+        assertEq(escrow.totalUSDCCommitted(), total);
+    }
 }

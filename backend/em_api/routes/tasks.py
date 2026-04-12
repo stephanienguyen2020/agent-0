@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import logging
@@ -10,10 +11,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+import httpx
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
+from web3 import Web3
 
 from em_api.config import settings
+from em_api.constants import ESCROW_FEE_BPS
 from em_api.deps import get_chain, get_supabase
 from em_api.services.evidence_schemas import validate_evidence
 from em_api.services.greenfield import (
@@ -22,12 +26,11 @@ from em_api.services.greenfield import (
     upload_file_via_greenfield_script,
 )
 from em_api.services.verification import run_pipeline
+from em_api.services.x402_facilitator import settle_payment
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
-
-FEE_BPS = 1300
 
 
 class TaskCreate(BaseModel):
@@ -56,7 +59,40 @@ class TaskSubmitBody(BaseModel):
 
 
 def _fee_micros(bounty: int) -> int:
-    return bounty * FEE_BPS // 10_000
+    return bounty * ESCROW_FEE_BPS // 10_000
+
+
+def _validate_x402_create(auth: dict, body: TaskCreate, total_micros: int) -> None:
+    if auth.get("x402Version") != 1:
+        raise HTTPException(400, "invalid x402Version")
+    if auth.get("scheme") != "exact":
+        raise HTTPException(400, "invalid x402 scheme")
+    if auth.get("network") != "opbnb-testnet":
+        raise HTTPException(400, "invalid x402 network")
+    if not settings.em_escrow_address or not settings.mock_usdc_address:
+        raise HTTPException(503, "EM_ESCROW_ADDRESS / MOCK_USDC_ADDRESS not configured")
+    esc = Web3.to_checksum_address(settings.em_escrow_address)
+    pl = auth.get("payload")
+    if not isinstance(pl, dict):
+        raise HTTPException(400, "invalid X-PAYMENT payload")
+    try:
+        from_a = Web3.to_checksum_address(pl.get("from", ""))
+        to_a = Web3.to_checksum_address(pl.get("to", ""))
+    except ValueError as e:
+        raise HTTPException(400, "invalid addresses in X-PAYMENT") from e
+    if from_a != Web3.to_checksum_address(body.requester_wallet):
+        raise HTTPException(400, "X-PAYMENT payload.from must match requester_wallet")
+    if to_a != esc:
+        raise HTTPException(400, "X-PAYMENT payload.to must be EM escrow")
+    try:
+        val = int(pl.get("value", 0))
+    except (TypeError, ValueError) as e:
+        raise HTTPException(400, "invalid X-PAYMENT value") from e
+    if val != total_micros:
+        raise HTTPException(
+            400,
+            f"X-PAYMENT value must equal bounty plus fee ({total_micros} micro USDC)",
+        )
 
 
 def _ensure_agent(supa, wallet: str, erc_id: int) -> str:
@@ -112,26 +148,58 @@ def list_tasks(status: str | None = None) -> dict:
 
 
 @router.post("")
-def create_task(body: TaskCreate, chain=Depends(get_chain)) -> dict:
+def create_task(request: Request, body: TaskCreate, chain=Depends(get_chain)) -> dict:
     supa = get_supabase()
     if not supa:
         raise HTTPException(503, "Supabase not configured")
     agent_id = _ensure_agent(supa, body.requester_wallet, body.requester_erc8004_id)
     task_id = "tk_" + uuid.uuid4().hex
     fee = _fee_micros(body.bounty_micros)
+    total_micros = body.bounty_micros + fee
     deadline = body.deadline_at
     if deadline.tzinfo is None:
         deadline = deadline.replace(tzinfo=timezone.utc)
     deadline_unix = int(deadline.timestamp())
 
-    tx_hash = chain.publish_task(
-        task_id,
-        body.requester_wallet,
-        body.requester_erc8004_id,
-        body.category,
-        body.bounty_micros,
-        deadline_unix,
+    use_x402 = settings.x402_enforce and not (
+        settings.environment == "development" and request.headers.get("X-PAYMENT-SKIP") == "1"
     )
+    x402_settle_tx: str | None = None
+    if use_x402:
+        raw = request.headers.get("X-PAYMENT")
+        if not raw:
+            raise HTTPException(402, "X-PAYMENT header required")
+        try:
+            auth = json.loads(base64.standard_b64decode(raw))
+        except (json.JSONDecodeError, ValueError) as e:
+            raise HTTPException(400, "invalid X-PAYMENT (expected base64 JSON)") from e
+        _validate_x402_create(auth, body, total_micros)
+        try:
+            out = settle_payment(auth)
+        except RuntimeError as e:
+            raise HTTPException(503, str(e)) from e
+        except httpx.HTTPStatusError as e:
+            raise HTTPException(502, e.response.text) from e
+        except httpx.RequestError as e:
+            raise HTTPException(502, f"facilitator unreachable: {e}") from e
+        x402_settle_tx = out.get("txHash")
+        tx_hash = chain.publish_task_x402(
+            task_id,
+            body.requester_wallet,
+            body.requester_erc8004_id,
+            body.category,
+            body.bounty_micros,
+            deadline_unix,
+        )
+    else:
+        tx_hash = chain.publish_task(
+            task_id,
+            body.requester_wallet,
+            body.requester_erc8004_id,
+            body.category,
+            body.bounty_micros,
+            deadline_unix,
+        )
 
     row = {
         "task_id": task_id,
@@ -152,7 +220,10 @@ def create_task(body: TaskCreate, chain=Depends(get_chain)) -> dict:
         "on_chain_task_id": task_id,
     }
     supa.table("tasks").insert(row).execute()
-    return {"task_id": task_id, "on_chain_tx_publish": tx_hash}
+    resp: dict = {"task_id": task_id, "on_chain_tx_publish": tx_hash}
+    if x402_settle_tx:
+        resp["on_chain_tx_x402_settle"] = x402_settle_tx
+    return resp
 
 
 def _executor_world_id_level(supa, executor_id: str) -> str | None:

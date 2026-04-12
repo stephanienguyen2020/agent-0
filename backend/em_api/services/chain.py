@@ -29,6 +29,20 @@ EM_ESCROW_ABI: list[dict[str, Any]] = [
     {
         "inputs": [
             {"internalType": "bytes32", "name": "taskId", "type": "bytes32"},
+            {"internalType": "address", "name": "agent", "type": "address"},
+            {"internalType": "uint256", "name": "agentErc8004Id", "type": "uint256"},
+            {"internalType": "uint8", "name": "category", "type": "uint8"},
+            {"internalType": "uint256", "name": "bounty", "type": "uint256"},
+            {"internalType": "uint64", "name": "deadline", "type": "uint64"},
+        ],
+        "name": "publishTaskX402",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function",
+    },
+    {
+        "inputs": [
+            {"internalType": "bytes32", "name": "taskId", "type": "bytes32"},
             {"internalType": "address", "name": "executor", "type": "address"},
             {"internalType": "uint256", "name": "executorErc8004Id", "type": "uint256"},
         ],
@@ -130,6 +144,40 @@ class ChainService:
         tid = task_id_to_bytes32(task_id)
         agent = Web3.to_checksum_address(agent_wallet)
         fn = self._escrow.functions.publishTask(
+            tid,
+            agent,
+            agent_erc8004_id,
+            category_to_uint(category),
+            int(bounty_micros),
+            int(deadline_unix),
+        )
+        tx = fn.build_transaction(
+            {
+                "from": self._account.address,
+                "nonce": self._w3.eth.get_transaction_count(self._account.address),
+                "chainId": settings.chain_id,
+            }
+        )
+        tx = _fill_gas(self._w3, tx)
+        signed = self._account.sign_transaction(tx)
+        h = self._w3.eth.send_raw_transaction(signed.raw_transaction)
+        return self._w3.to_hex(h)
+
+    def publish_task_x402(
+        self,
+        task_id: str,
+        agent_wallet: str,
+        agent_erc8004_id: int,
+        category: str,
+        bounty_micros: int,
+        deadline_unix: int,
+    ) -> str | None:
+        """Publish after USDC was moved to escrow (e.g. EIP-3009 x402 settle)."""
+        if not self._escrow or not self._account:
+            return None
+        tid = task_id_to_bytes32(task_id)
+        agent = Web3.to_checksum_address(agent_wallet)
+        fn = self._escrow.functions.publishTaskX402(
             tid,
             agent,
             agent_erc8004_id,
