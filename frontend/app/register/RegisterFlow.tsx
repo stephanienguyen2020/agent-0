@@ -34,7 +34,9 @@ function RegisterFlowInner() {
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
 
-  const appId = process.env.NEXT_PUBLIC_WORLD_ID_APP_ID as `app_${string}` | undefined;
+  const appId = process.env.NEXT_PUBLIC_WORLD_ID_APP_ID as
+    | `app_${string}`
+    | undefined;
   const action = process.env.NEXT_PUBLIC_WORLD_ID_ACTION || "register-executor";
 
   const wallet =
@@ -51,7 +53,9 @@ function RegisterFlowInner() {
     });
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
-      setErr((j as { error?: string }).error || (await r.text()) || r.statusText);
+      setErr(
+        (j as { error?: string }).error || (await r.text()) || r.statusText,
+      );
       return null;
     }
     const ctx = (await r.json()) as RpContext;
@@ -62,7 +66,9 @@ function RegisterFlowInner() {
   const startVerify = useCallback(async () => {
     setOk(null);
     if (!wallet) {
-      setErr("Connect your wallet first (wallet address is the World ID signal).");
+      setErr(
+        "Connect your wallet first (wallet address is the World ID signal).",
+      );
       return;
     }
     if (!appId) {
@@ -87,7 +93,9 @@ function RegisterFlowInner() {
         const t = await r.text();
         throw new Error(t || r.statusText);
       }
-      setOk("Verified — you can accept tasks (Orb required for high bounties).");
+      setOk(
+        "Verified — you can accept tasks (Orb required for high bounties).",
+      );
       setOpen(false);
     },
     [wallet],
@@ -96,7 +104,9 @@ function RegisterFlowInner() {
   if (!authenticated) {
     return (
       <div className="space-y-4">
-        <p className="text-sm text-az-muted-2">Sign in with Privy to link a wallet before World ID verification.</p>
+        <p className="text-sm text-az-muted-2">
+          Sign in with Privy to link a wallet before World ID verification.
+        </p>
         <BtnPrimary type="button" onClick={() => login()}>
           Connect wallet to register
         </BtnPrimary>
@@ -107,21 +117,33 @@ function RegisterFlowInner() {
   return (
     <div className="space-y-6">
       <div>
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-az-muted">Signing address</p>
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-az-muted">
+          Signing address
+        </p>
         <div className="rounded-[14px] border border-az-stroke-2 bg-white/[0.03] px-4 py-3">
           <p className="az-mono text-sm text-az-text" title={wallet}>
-            {wallet ? shortAddr(wallet) : "—"}
+            {wallet ? wallet : "-"}
           </p>
         </div>
       </div>
 
       <div>
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-az-muted">Verification level</p>
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-az-muted">
+          Verification level
+        </p>
         <div className="flex flex-wrap gap-2">
-          <button type="button" className={chipClass(!orbMode)} onClick={() => setOrbMode(false)}>
+          <button
+            type="button"
+            className={chipClass(!orbMode)}
+            onClick={() => setOrbMode(false)}
+          >
             Device
           </button>
-          <button type="button" className={chipClass(orbMode)} onClick={() => setOrbMode(true)}>
+          <button
+            type="button"
+            className={chipClass(orbMode)}
+            onClick={() => setOrbMode(true)}
+          >
             Orb (high-bounty tasks)
           </button>
         </div>
@@ -150,7 +172,11 @@ function RegisterFlowInner() {
           action={action}
           rp_context={rp}
           allow_legacy_proofs
-          preset={orbMode ? orbLegacy({ signal: wallet! }) : deviceLegacy({ signal: wallet! })}
+          preset={
+            orbMode
+              ? orbLegacy({ signal: wallet! })
+              : deviceLegacy({ signal: wallet! })
+          }
           onSuccess={() => {}}
           handleVerify={(res) => void handleVerify(res)}
           onError={(code) => setErr(`World ID error: ${code}`)}
@@ -165,11 +191,19 @@ export function RegisterFlow() {
   if (!configured) {
     return (
       <div className="space-y-3 rounded-[14px] border border-amber-500/25 bg-amber-500/5 px-4 py-4 text-sm text-az-muted-2">
-        <p className="font-medium text-amber-200/90">Wallet UI is not configured</p>
+        <p className="font-medium text-amber-200/90">
+          Wallet UI is not configured
+        </p>
         <p>
-          Set <code className="az-mono rounded bg-white/10 px-1.5 py-0.5 text-[13px]">NEXT_PUBLIC_PRIVY_APP_ID</code> in{" "}
-          <code className="az-mono rounded bg-white/10 px-1 py-0.5">frontend/.env.local</code>, then reload and connect your
-          wallet to complete World ID below.
+          Set{" "}
+          <code className="az-mono rounded bg-white/10 px-1.5 py-0.5 text-[13px]">
+            NEXT_PUBLIC_PRIVY_APP_ID
+          </code>{" "}
+          in{" "}
+          <code className="az-mono rounded bg-white/10 px-1 py-0.5">
+            frontend/.env.local
+          </code>
+          , then reload and connect your wallet to complete World ID below.
         </p>
       </div>
     );

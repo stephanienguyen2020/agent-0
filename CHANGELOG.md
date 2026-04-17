@@ -30,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Frontend:** `/register` main column uses the full width of the shell content area (removed `max-w-3xl`); hero intro uses `max-w-4xl` for readable line length on wide screens.
 - **Frontend:** `/register` — AgentZero-style hero strip, main flow inside `Card`, developer env documentation in a collapsible `<details>`; `RegisterFlow` uses `BtnPrimary`, device vs Orb chip toggle, signing-address panel, and bordered success/error alerts; Privy-disabled state uses a consistent notice panel.
 - **Frontend:** Layout is sidebar + main content (replaces header-only nav); metadata/title use AgentZero branding; `next.config.ts` adds `outputFileTracingRoot` for correct file tracing when multiple lockfiles exist.
 - **Contracts:** Redeploy **EMEscrow** required to pick up `publishTaskX402` / `totalUSDCCommitted` (existing `publishTask` unchanged for callers but updates committed balance tracking).
