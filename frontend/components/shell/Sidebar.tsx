@@ -104,10 +104,15 @@ export function Sidebar({ marketCount }: { marketCount?: number }) {
           <IconLink className="h-[18px] w-[18px] shrink-0" />
           IRC Channels
         </span>
-        <span className="flex cursor-not-allowed items-center gap-3 rounded-[14px] px-3.5 py-[11px] text-[13.5px] font-medium text-az-muted-2/70">
+        <Link
+          href="/verification"
+          className={`flex items-center gap-3 rounded-[14px] border border-transparent px-3.5 py-[11px] text-[13.5px] font-medium transition hover:bg-white/[0.03] hover:text-az-text ${
+            activePrefix("/verification") ? "az-nav-active text-az-text" : "text-az-muted-2"
+          }`}
+        >
           <IconShield className="h-[18px] w-[18px] shrink-0" />
           Verification
-        </span>
+        </Link>
       </div>
 
       <div className="mt-auto border-t border-az-stroke pt-5">
