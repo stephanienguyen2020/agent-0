@@ -46,6 +46,22 @@ def _first_response_item(result: dict[str, Any]) -> dict[str, Any] | None:
     return item if isinstance(item, dict) else None
 
 
+@router.get("/status")
+def world_id_status(wallet: str) -> dict[str, Any]:
+    """Return persisted World ID verification level from `world_id_proofs` (if any)."""
+    supa = get_supabase()
+    if not supa:
+        raise HTTPException(503, "Supabase not configured")
+    w = wallet.strip().lower()
+    if not w:
+        raise HTTPException(422, "wallet is required")
+    r = supa.table("world_id_proofs").select("verification_level").eq("wallet", w).limit(1).execute()
+    if not r.data:
+        return {"verification_level": None}
+    lvl = r.data[0].get("verification_level")
+    return {"verification_level": lvl}
+
+
 @router.post("/verify")
 async def verify_world_id(body: WorldIdVerifyBody) -> dict:
     if not settings.world_id_app_id and not settings.world_id_rp_id:

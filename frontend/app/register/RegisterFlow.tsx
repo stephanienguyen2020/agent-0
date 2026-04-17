@@ -3,8 +3,9 @@
 import { IDKitRequestWidget } from "@worldcoin/idkit";
 import { deviceLegacy, orbLegacy } from "@worldcoin/idkit-core";
 import type { IDKitResult, RpContext } from "@worldcoin/idkit-core";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getAddress } from "viem";
 import { useAccount } from "wagmi";
 
@@ -17,7 +18,10 @@ function shortAddr(a: string) {
   return `${a.slice(0, 8)}…${a.slice(-6)}`;
 }
 
-function chipClass(active: boolean) {
+function chipClass(active: boolean, disabled?: boolean) {
+  if (disabled) {
+    return "cursor-not-allowed rounded-[14px] border border-az-stroke-2 bg-white/[0.02] px-4 py-2.5 text-xs font-semibold text-az-muted-2 opacity-45 sm:text-[13px]";
+  }
   return `rounded-[14px] border px-4 py-2.5 text-xs font-semibold transition sm:text-[13px] ${
     active
       ? "border-[rgba(182,242,74,0.3)] bg-[rgba(182,242,74,0.06)] text-[#cdf56a]"
@@ -26,6 +30,7 @@ function chipClass(active: boolean) {
 }
 
 function RegisterFlowInner() {
+  const queryClient = useQueryClient();
   const { authenticated, login } = usePrivy();
   const { address } = useAccount();
   const { wallets } = useWallets();
@@ -46,6 +51,45 @@ function RegisterFlowInner() {
     (address as string | undefined) ||
     (wallets[0]?.address as string | undefined) ||
     undefined;
+
+  const normalizedWallet = useMemo(() => {
+    if (!wallet) return null;
+    try {
+      return getAddress(wallet);
+    } catch {
+      return null;
+    }
+  }, [wallet]);
+
+  const { data: statusData } = useQuery({
+    queryKey: ["world-id-status", normalizedWallet],
+    queryFn: async () => {
+      const api = getApiBase();
+      const r = await fetch(
+        `${api}/api/v1/world-id/status?wallet=${encodeURIComponent(normalizedWallet!)}`,
+      );
+      if (!r.ok) throw new Error(await r.text());
+      return r.json() as Promise<{
+        verification_level: "device" | "orb" | null;
+      }>;
+    },
+    enabled: Boolean(authenticated && normalizedWallet),
+  });
+
+  const level = statusData?.verification_level ?? null;
+  const hasDeviceOrHigher =
+    level === "device" || level === "orb";
+  const hasOrb = level === "orb";
+
+  useEffect(() => {
+    setOrbMode(false);
+  }, [normalizedWallet]);
+
+  useEffect(() => {
+    if (level === "device" || level === "orb") {
+      setOrbMode(true);
+    }
+  }, [level]);
 
   const loadRp = useCallback(async () => {
     setErr(null);
@@ -68,10 +112,21 @@ function RegisterFlowInner() {
 
   const startVerify = useCallback(async () => {
     setOk(null);
+    setErr(null);
     if (!wallet) {
       setErr(
         "Connect your wallet first (wallet address is the World ID signal).",
       );
+      return;
+    }
+    if (!orbMode && hasDeviceOrHigher) {
+      setErr(
+        "You're already verified at Device level. Select Orb to upgrade with Orb.",
+      );
+      return;
+    }
+    if (orbMode && hasOrb) {
+      setErr("You're already verified with Orb.");
       return;
     }
     if (!appId) {
@@ -87,7 +142,14 @@ function RegisterFlowInner() {
       return;
     }
     setOpen(true);
-  }, [appId, loadRp, wallet]);
+  }, [
+    appId,
+    hasDeviceOrHigher,
+    hasOrb,
+    loadRp,
+    orbMode,
+    wallet,
+  ]);
 
   const handleVerify = useCallback(
     async (result: IDKitResult) => {
@@ -111,12 +173,17 @@ function RegisterFlowInner() {
         throw new Error(t || r.statusText);
       }
       setOk(
-        "Verified - you can accept tasks (Orb required for high bounties).",
+        "Verified — you can accept tasks (Orb required for high bounties).",
       );
       setOpen(false);
       setBoundSignal(null);
+      if (normalizedWallet) {
+        await queryClient.invalidateQueries({
+          queryKey: ["world-id-status", normalizedWallet],
+        });
+      }
     },
-    [boundSignal, wallet],
+    [boundSignal, normalizedWallet, queryClient, wallet],
   );
 
   if (!authenticated) {
@@ -132,8 +199,19 @@ function RegisterFlowInner() {
     );
   }
 
+  const verifyDisabled =
+    (!orbMode && hasDeviceOrHigher) || (orbMode && hasOrb);
+
   return (
     <div className="space-y-6">
+      {hasDeviceOrHigher && (
+        <div className="rounded-[14px] border border-sky-500/35 bg-sky-500/10 px-4 py-3 text-sm text-sky-100">
+          {hasOrb
+            ? "You're verified with Orb (includes Device). You can accept tasks, including high-bounty Orb-gated work."
+            : "You're already verified at Device level. Select Orb above if you need to qualify for high-bounty tasks."}
+        </div>
+      )}
+
       <div>
         <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-az-muted">
           Signing address
@@ -152,22 +230,32 @@ function RegisterFlowInner() {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            className={chipClass(!orbMode)}
-            onClick={() => setOrbMode(false)}
+            disabled={hasDeviceOrHigher}
+            className={chipClass(!orbMode, hasDeviceOrHigher)}
+            onClick={() => {
+              if (!hasDeviceOrHigher) setOrbMode(false);
+            }}
           >
             Device
           </button>
           <button
             type="button"
-            className={chipClass(orbMode)}
-            onClick={() => setOrbMode(true)}
+            disabled={hasOrb}
+            className={chipClass(orbMode, hasOrb)}
+            onClick={() => {
+              if (!hasOrb) setOrbMode(true);
+            }}
           >
             Orb (high-bounty tasks)
           </button>
         </div>
       </div>
 
-      <BtnPrimary type="button" onClick={() => void startVerify()}>
+      <BtnPrimary
+        type="button"
+        disabled={verifyDisabled}
+        onClick={() => void startVerify()}
+      >
         Verify with World ID
       </BtnPrimary>
 
