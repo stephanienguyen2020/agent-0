@@ -2,13 +2,35 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from eth_account import Account
 from web3 import Web3
 from web3.contract import Contract
+from web3.exceptions import ContractLogicError
 
 from em_api.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+class PreflightRejected(Exception):
+    """publishTaskX402 would revert for a reason we detected without sending a tx."""
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail)
+        self.detail = detail
+
+ERC20_MIN_ABI: list[dict[str, Any]] = [
+    {
+        "inputs": [{"internalType": "address", "name": "account", "type": "address"}],
+        "name": "balanceOf",
+        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
+]
 
 # Minimal ABI for MVP lifecycle (matches contracts/src/EMEscrow.sol)
 EM_ESCROW_ABI: list[dict[str, Any]] = [
@@ -83,6 +105,44 @@ EM_ESCROW_ABI: list[dict[str, Any]] = [
         "stateMutability": "view",
         "type": "function",
     },
+    {
+        "inputs": [
+            {"internalType": "bytes32", "name": "role", "type": "bytes32"},
+            {"internalType": "address", "name": "account", "type": "address"},
+        ],
+        "name": "hasRole",
+        "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
+    {
+        "inputs": [],
+        "name": "paused",
+        "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
+    {
+        "inputs": [],
+        "name": "totalUSDCCommitted",
+        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
+    {
+        "inputs": [],
+        "name": "usdc",
+        "outputs": [{"internalType": "address", "name": "", "type": "address"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
+    {
+        "inputs": [],
+        "name": "EM_AGENT_ROLE",
+        "outputs": [{"internalType": "bytes32", "name": "", "type": "bytes32"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
 ]
 
 
@@ -125,6 +185,57 @@ def _fill_gas(w3: Web3, tx: dict) -> dict:
     return tx
 
 
+# cast sig "publishTaskX402(bytes32,address,uint256,uint8,uint256,uint64)" -> 0x421bbe07
+PUBLISH_TASK_X402_SELECTOR_HEX = "421bbe07"
+
+
+def _escrow_bytecode_publish_x402_hint(w3: Web3, escrow_cs: str) -> tuple[bool, int]:
+    """Whether dispatch table includes publishTaskX402; proxy bytecode is short (impl code lives elsewhere)."""
+    raw = w3.eth.get_code(Web3.to_checksum_address(escrow_cs))
+    hx = raw.hex()[2:].lower() if raw.hex().startswith("0x") else raw.hex().lower()
+    return (PUBLISH_TASK_X402_SELECTOR_HEX in hx, len(raw))
+
+
+def _publish_task_x402_call_failed_detail(
+    exc: ContractLogicError,
+    snap: dict[str, Any],
+    *,
+    selector_in_code: bool,
+    code_len: int,
+) -> str:
+    """Actionable detail when eth_call reverts without RPC revert data (common on public nodes)."""
+    rpc_data = getattr(exc, "data", None)
+    lead = (
+        "publishTaskX402 on-chain simulation reverted. "
+        f"RPC revert data: {rpc_data!r}. "
+    )
+    if code_len < 900:
+        return (
+            lead
+            + "Escrow bytecode at EM_ESCROW_ADDRESS is very short — this may be a proxy. "
+            "Confirm the implementation includes publishTaskX402 (this repo's EMEscrow.sol) "
+            "and that EM_ESCROW_ADDRESS points to the correct proxy/implementation pair."
+        )
+    if not selector_in_code:
+        return (
+            lead
+            + "Bytecode at EM_ESCROW_ADDRESS does not contain the publishTaskX402 selector "
+            f"(0x{PUBLISH_TASK_X402_SELECTOR_HEX}). "
+            "Redeploy EMEscrow from contracts/src/EMEscrow.sol in this repo and set EM_ESCROW_ADDRESS."
+        )
+    tail = (
+        "The function appears in bytecode; typical on-chain causes are InsufficientFreeUSDC, "
+        "DeadlinePassed, or TaskAlreadyExists — try an archive/full RPC for decoded revert reasons."
+    )
+    if snap.get("ok"):
+        tail += (
+            f" Preflight: committed={snap.get('total_usdc_committed')} µUSDC, "
+            f"escrow_balance={snap.get('usdc_balance_escrow')} µUSDC, "
+            f"total_need={snap.get('total_need_micros')} µUSDC."
+        )
+    return lead + tail
+
+
 class ChainService:
     def __init__(self) -> None:
         self._w3 = _w3()
@@ -147,6 +258,172 @@ class ChainService:
             return int(self._escrow.functions.feeBps().call())
         except Exception:
             return None
+
+    def _committed_micros_via_storage(self, escrow_cs: str) -> int | None:
+        """When totalUSDCCommitted() eth_call fails (RPC quirks), read slot from forge layout (default slot 3)."""
+        try:
+            slot = int(settings.em_escrow_committed_storage_slot)
+            raw = self._w3.eth.get_storage_at(Web3.to_checksum_address(escrow_cs), slot)
+            return int.from_bytes(raw, "big")
+        except Exception:
+            return None
+
+    def publish_task_x402_preflight(
+        self,
+        task_id: str,
+        agent_wallet: str,
+        agent_erc8004_id: int,
+        category: str,
+        bounty_micros: int,
+        deadline_unix: int,
+    ) -> dict[str, Any]:
+        """On-chain facts for publishTaskX402 reverts (no secrets)."""
+        out: dict[str, Any] = {"ok": False}
+        if not self._escrow or not self._account:
+            out["reason"] = "escrow_or_agent_key_missing"
+            return out
+
+        esc_addr = Web3.to_checksum_address(settings.em_escrow_address)
+
+        try:
+            block_ts = int(self._w3.eth.get_block("latest")["timestamp"])
+            chain_net = int(self._w3.eth.chain_id)
+        except Exception as e:
+            out["reason"] = "rpc_error"
+            out["preflight_msg"] = str(e)[:240]
+            return out
+
+        code = self._w3.eth.get_code(esc_addr)
+        if len(code) == 0:
+            out["reason"] = "em_escrow_not_a_contract"
+            out["em_escrow_address"] = esc_addr
+            return out
+
+        ec = self._escrow
+
+        def read_view(label: str, thunk):
+            try:
+                return thunk()
+            except ContractLogicError as e:
+                out["failed_view"] = label
+                out["reason"] = "em_escrow_read_reverted"
+                out["preflight_msg"] = str(e)[:240]
+                raise
+
+        try:
+            fb = int(read_view("feeBps", lambda: ec.functions.feeBps().call()))
+            fee_amt = int(bounty_micros) * fb // 10_000
+            total_need = int(bounty_micros) + fee_amt
+            committed = 0
+            committed_read_ok = False
+            try:
+                committed = int(ec.functions.totalUSDCCommitted().call())
+                committed_read_ok = True
+            except Exception as ex_committed:
+                # Broad catch: some RPCs raise outside ContractLogicError for eth_call quirks.
+                out["totalUSDCCommitted_call_error"] = f"{type(ex_committed).__name__}: {str(ex_committed)[:160]}"
+                cs = self._committed_micros_via_storage(esc_addr)
+                if cs is not None:
+                    committed = cs
+                    committed_read_ok = True
+                    out["totalUSDCCommitted_via_storage_slot"] = settings.em_escrow_committed_storage_slot
+                else:
+                    out["totalUSDCCommitted_read_failed"] = True
+                    out["committed_unknown"] = True
+            usdc_addr_val = read_view("usdc", lambda: ec.functions.usdc().call())
+            tok = self._w3.eth.contract(address=Web3.to_checksum_address(usdc_addr_val), abi=ERC20_MIN_ABI)
+            bal = int(
+                read_view(
+                    "balanceOf_escrow_mock_usdc",
+                    lambda: tok.functions.balanceOf(esc_addr).call(),
+                )
+            )
+            paused = bool(read_view("paused", lambda: ec.functions.paused().call()))
+            signer = self._account.address
+            try:
+                role_hash = ec.functions.EM_AGENT_ROLE().call()
+            except Exception:
+                role_hash = Web3.keccak(text="EM_AGENT_ROLE")
+            has_role = bool(read_view("hasRole", lambda: ec.functions.hasRole(role_hash, signer).call()))
+            deadline_ok = int(deadline_unix) > block_ts
+            liquidity_ok = committed_read_ok and (bal >= committed + total_need)
+            out.update(
+                {
+                    "ok": True,
+                    "chain_id_rpc": chain_net,
+                    "chain_id_settings": settings.chain_id,
+                    "block_timestamp": block_ts,
+                    "deadline_unix": int(deadline_unix),
+                    "deadline_ok": deadline_ok,
+                    "fee_bps": fb,
+                    "bounty_micros": int(bounty_micros),
+                    "fee_micros_onchain_formula": fee_amt,
+                    "total_need_micros": total_need,
+                    "total_usdc_committed": committed,
+                    "total_usdc_committed_read_ok": committed_read_ok,
+                    "usdc_balance_escrow": bal,
+                    "liquidity_ok": liquidity_ok,
+                    "escrow_paused": paused,
+                    "em_agent_signer": signer,
+                    "has_em_agent_role": has_role,
+                },
+            )
+        except ContractLogicError:
+            pass
+        except Exception as e:
+            out["preflight_error"] = type(e).__name__
+            out["preflight_msg"] = str(e)[:240]
+        return out
+
+    def publish_task_x402_human_hint(self, snap: dict[str, Any]) -> str | None:
+        if not snap.get("ok"):
+            if snap.get("reason") == "em_escrow_not_a_contract":
+                return (
+                    f"No contract bytecode at EM_ESCROW_ADDRESS ({snap.get('em_escrow_address')}). "
+                    "Set EM_ESCROW_ADDRESS to your deployed EMEscrow on opBNB Testnet (same chain as OPBNB_RPC_URL / CHAIN_ID)."
+                )
+            if snap.get("reason") == "em_escrow_read_reverted":
+                fv = snap.get("failed_view", "?")
+                return (
+                    f"Calling EMEscrow.{fv}() reverted — EM_ESCROW_ADDRESS may not be this repo's EMEscrow on this RPC, "
+                    "or you're on the wrong chain. Verify the address on an opBNB explorer and align OPBNB_RPC_URL / CHAIN_ID / EM_ESCROW_ADDRESS."
+                )
+            if snap.get("reason") == "rpc_error":
+                return f"RPC error reading latest block / chain id: {snap.get('preflight_msg', '')}"
+            return snap.get("reason") or snap.get("preflight_msg")
+        if snap.get("escrow_paused"):
+            return "EMEscrow is paused — unpause or deploy a new escrow."
+        if not snap.get("has_em_agent_role"):
+            return (
+                f"Signer {snap.get('em_agent_signer')} (EM_AGENT_PRIVATE_KEY) does not have EM_AGENT_ROLE on this EMEscrow. "
+                "Grant the role to that address in the deploy script, or set EM_AGENT_PRIVATE_KEY to the funded EM agent wallet that was granted the role."
+            )
+        if not snap.get("deadline_ok"):
+            return (
+                f"Deadline {snap.get('deadline_unix')} is not after opBNB block time {snap.get('block_timestamp')} — "
+                "choose a later deadline (or fix clock/timezone when sending deadline_at)."
+            )
+        if int(snap.get("chain_id_rpc") or 0) != int(snap.get("chain_id_settings") or 0):
+            return (
+                f"CHAIN_ID mismatch: RPC reports {snap.get('chain_id_rpc')} but settings.chain_id is "
+                f"{snap.get('chain_id_settings')} — fix env so EIP-712 / txs target opBNB Testnet (5611)."
+            )
+        if snap.get("committed_unknown"):
+            return (
+                "Could not read totalUSDCCommitted (contract getter and eth_getStorageAt failed). "
+                "If this escrow is behind a proxy, set EMESCROW_COMMITTED_STORAGE_SLOT to the layout slot "
+                "for totalUSDCCommitted or use a full-node RPC."
+            )
+        if not snap.get("liquidity_ok"):
+            c = snap.get("total_usdc_committed")
+            bal = snap.get("usdc_balance_escrow")
+            tn = snap.get("total_need_micros")
+            return (
+                f"InsufficientFreeUSDC: escrow MockUSDC balance ({bal} µUSDC) must cover "
+                f"totalUSDCCommitted ({c}) + this task ({tn} µUSDC). "
+                "Either EIP-3009 settle more USDC for bounty+fee, or release/refund tasks to reduce committed liquidity."
+            )
+        return None
 
     def publish_task(
         self,
@@ -193,6 +470,18 @@ class ChainService:
         """Publish after USDC was moved to escrow (e.g. EIP-3009 x402 settle)."""
         if not self._escrow or not self._account:
             return None
+        snap = self.publish_task_x402_preflight(
+            task_id,
+            agent_wallet,
+            agent_erc8004_id,
+            category,
+            bounty_micros,
+            deadline_unix,
+        )
+        hint = self.publish_task_x402_human_hint(snap)
+        if hint:
+            raise PreflightRejected(hint)
+
         tid = task_id_to_bytes32(task_id)
         agent = Web3.to_checksum_address(agent_wallet)
         fn = self._escrow.functions.publishTaskX402(
@@ -203,6 +492,24 @@ class ChainService:
             int(bounty_micros),
             int(deadline_unix),
         )
+        try:
+            fn.call({"from": self._account.address})
+        except ContractLogicError as e:
+            logger.warning("publishTaskX402 eth_call revert: %s", e)
+            esc_cs = Web3.to_checksum_address(settings.em_escrow_address)
+            cs = self._committed_micros_via_storage(esc_cs)
+            bal = snap.get("usdc_balance_escrow") if snap.get("ok") else None
+            tn = snap.get("total_need_micros") if snap.get("ok") else None
+            if cs is not None and bal is not None and tn is not None and bal < cs + int(tn):
+                raise PreflightRejected(
+                    f"InsufficientFreeUSDC: escrow balance {bal} µUSDC < committed ({cs}) + this task ({tn}). "
+                    "Increase the EIP-3009 authorization amount or reduce outstanding escrow commitments."
+                ) from e
+            sel_ok, code_len = _escrow_bytecode_publish_x402_hint(self._w3, esc_cs)
+            raise PreflightRejected(
+                _publish_task_x402_call_failed_detail(e, snap, selector_in_code=sel_ok, code_len=code_len)
+            ) from e
+
         tx = fn.build_transaction(
             {
                 "from": self._account.address,

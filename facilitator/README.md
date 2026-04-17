@@ -27,7 +27,7 @@ If you already have a repo-root `.env` with `MOCK_USDC_ADDRESS`, `EM_ESCROW_ADDR
 docker compose up facilitator
 ```
 
-This builds [`Dockerfile`](Dockerfile) and listens on **8402**. Verify with `curl -s http://localhost:8402/healthz`. The FastAPI app must use `X402_FACILITATOR_URL=http://localhost:8402` (default in `.env.example`).
+This builds [`Dockerfile`](Dockerfile) and listens on **8402**. Verify with `curl -s http://localhost:8402/healthz`. The FastAPI app must use `X402_FACILITATOR_URL=http://localhost:8402` (default in `.env.example`). With FastAPI also running, you can smoke-test settle + `publishTaskX402` via `backend/.venv/bin/python scripts/test_publish_task_flow.py` from the repo root (`PUBLISH_TEST_REQUESTER_PRIVATE_KEY` in root `.env`; see that script’s docstring).
 
 ## Docker
 

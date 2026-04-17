@@ -27,6 +27,7 @@ from em_api.services.greenfield import (
     upload_file_via_greenfield_script,
 )
 from em_api.services.verification import run_pipeline
+from em_api.services.chain import PreflightRejected
 from em_api.services.x402_facilitator import settle_payment
 
 logger = logging.getLogger(__name__)
@@ -212,6 +213,8 @@ def create_task(request: Request, body: TaskCreate, chain=Depends(get_chain)) ->
                 body.bounty_micros,
                 deadline_unix,
             )
+        except PreflightRejected as e:
+            raise HTTPException(400, e.detail) from e
         except ContractLogicError as e:
             logger.warning("publish_task_x402 reverted: %s", e)
             raise HTTPException(

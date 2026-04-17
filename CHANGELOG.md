@@ -6,8 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Scripts:** [`scripts/deploy-contracts.ts`](scripts/deploy-contracts.ts) — define `__dirname` via `import.meta.url` / `fileURLToPath` so `npm run deploy-contracts` works under **ESM** (`"type": "module"` in [`scripts/package.json`](scripts/package.json)); `__dirname` is not defined in ESM and previously threw at startup.
+- Backend: when `publishTaskX402` **simulation** reverts but the RPC returns **no revert data**, map the failure to **`PreflightRejected` (HTTP 400)** with guidance instead of an opaque **502**. Detect likely **proxy vs implementation** by bytecode length and whether **`publishTaskX402`** selector **`0x421bbe07`** appears at `EM_ESCROW_ADDRESS`. **`totalUSDCCommitted()`** preflight read now falls back to **`eth_getStorageAt`** on **any** read exception (not only `ContractLogicError`), recording a short `totalUSDCCommitted_call_error` hint when that happens.
+
 ### Added
 
+- **Scripts:** [`scripts/test_publish_task_flow.py`](scripts/test_publish_task_flow.py) — loads repo-root `.env`, signs EIP-3009 with `PUBLISH_TEST_REQUESTER_PRIVATE_KEY` using `em_api.services.x402_signer`, `GET /api/v1/tasks/escrow-fee-bps` for fee math, `POST /api/v1/tasks` with `X-PAYMENT` (same path as browser x402 publish). Documented `PUBLISH_TEST_REQUESTER_PRIVATE_KEY` in [`.env.example`](.env.example).
 - Backend: **`GET /api/v1/tasks/escrow-fee-bps`** returns deployed **`feeBps`** from **EMEscrow** (fallback to **`ESCROW_FEE_BPS`** when RPC/ABI read fails). Used so EIP-3009 **`value`** matches **`publishTaskX402`** accounting.
 - **DevOps:** Root [`docker-compose.yml`](docker-compose.yml) service **`facilitator`** builds [`facilitator/Dockerfile`](facilitator/Dockerfile) and exposes **8402** using repo-root `.env`; [README](README.md) quick start + [`facilitator/README.md`](facilitator/README.md) document `docker compose up facilitator` and `curl …/healthz`.
 - Backend: **`GET /api/v1/world-id/status?wallet=...`** returns persisted `verification_level` (`device` \| `orb` \| null) from `world_id_proofs`.
@@ -38,6 +44,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **`POST /api/v1/tasks` (x402):** When **`totalUSDCCommitted()`** **`eth_call`** fails, backend reads **`totalUSDCCommitted`** via **`eth_getStorageAt`** (`EMESCROW_COMMITTED_STORAGE_SLOT`, default **3** per Forge layout) so **`InsufficientFreeUSDC`** surfaces as **400** with balances instead of a blind **502**.
+- **`POST /api/v1/tasks` (x402):** Preflight performs **bytecode-at-address** checks and labels which **`feeBps` / `usdc` / … view** fails when **`ContractLogicError`** implies **wrong `EM_ESCROW_ADDRESS` or chain/RPC**.
+- **`POST /api/v1/tasks` (x402):** On-chain **preflight** (EM_AGENT_ROLE, paused, deadline vs block time, `totalUSDCCommitted` + `feeBps` vs USDC `balanceOf(escrow)`, `chain_id` vs RPC) runs before **`publishTaskX402`**; actionable failures return **400** via **`PreflightRejected`** instead of generic **502**.
 - **`POST /api/v1/tasks`** (`publishTaskX402`): **`ContractLogicError` / `estimate_gas`** when on-chain **`feeBps`** did not match **`ESCROW_FEE_BPS`** — the escrow recomputes fee from the contract while x402 settle used the wallet-signed **`value`**. **`create_task`** now derives fee from **`feeBps()`** on deployed **EMEscrow**, and **`PostTaskForm`** loads the same **`fee_bps`** via **`getEscrowFeeBps()`** before signing EIP-3009.
 - **`agent_to_agent`** category mapped to escrow enum index **4** (**DigitalPhysical**) so **`category_to_uint`** no longer raises **500**.
 - Backend: **`publish_task`** / **`publish_task_x402`** **`ContractLogicError`** → **502** with hints instead of raw **500** tracebacks.

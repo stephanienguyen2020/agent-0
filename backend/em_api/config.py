@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     em_agent_private_key: str = ""
     mock_usdc_address: str = ""
     em_escrow_address: str = ""
+    # `forge inspect EMEscrow storageLayout` — totalUSDCCommitted at slot 3 for this repo's contract; proxies may differ.
+    em_escrow_committed_storage_slot: int = Field(
+        default=3,
+        validation_alias=AliasChoices("EMESCROW_COMMITTED_STORAGE_SLOT"),
+    )
     chain_id: int = 5611
 
     gemini_api_key: str = ""
