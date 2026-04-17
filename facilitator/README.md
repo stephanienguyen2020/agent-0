@@ -4,6 +4,8 @@ Self-hosted **EIP-3009** helper for MockUSDC on opBNB Testnet: verifies typed-da
 
 ## Run locally
 
+On startup, the app loads the **monorepo root** `.env` (and optional `facilitator/.env` if present) via `python-dotenv`, same as pointing Docker at `env_file`. You do not need to `export` every variable if they are already in the root `.env`.
+
 ```bash
 cd facilitator
 pip install -r requirements.txt
@@ -16,6 +18,16 @@ uvicorn app.main:app --host 0.0.0.0 --port 8402
 ```
 
 Point the API at it with `X402_FACILITATOR_URL=http://localhost:8402` (see root `.env.example`).
+
+## Docker Compose (monorepo root)
+
+If you already have a repo-root `.env` with `MOCK_USDC_ADDRESS`, `EM_ESCROW_ADDRESS`, `FACILITATOR_PRIVATE_KEY`, and `OPBNB_RPC_URL` (same as the backend), run:
+
+```bash
+docker compose up facilitator
+```
+
+This builds [`Dockerfile`](Dockerfile) and listens on **8402**. Verify with `curl -s http://localhost:8402/healthz`. The FastAPI app must use `X402_FACILITATOR_URL=http://localhost:8402` (default in `.env.example`).
 
 ## Docker
 

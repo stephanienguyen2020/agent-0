@@ -1,6 +1,37 @@
 import { getApiBase } from "@/lib/api-base";
+import { ESCROW_FEE_BPS } from "@/lib/constants";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+/** Basis points charged by deployed EMEscrow — use for EIP-3009 totals (fallback: `ESCROW_FEE_BPS`). */
+export async function getEscrowFeeBps(): Promise<number> {
+  const r = await fetch(`${getApiBase()}/api/v1/tasks/escrow-fee-bps`, { cache: "no-store" });
+  if (!r.ok) return ESCROW_FEE_BPS;
+  const j = (await r.json()) as { fee_bps?: unknown };
+  return typeof j.fee_bps === "number" && j.fee_bps >= 0 && j.fee_bps <= 10_000 ? j.fee_bps : ESCROW_FEE_BPS;
+}
+
+/** Parse FastAPI `{ "detail": "..." }` (or validation array) for display. */
+export function parseFastApiDetail(body: string): string {
+  const t = body.trim();
+  if (!t) return "Request failed";
+  try {
+    const j = JSON.parse(t) as { detail?: unknown };
+    if (typeof j.detail === "string") return j.detail;
+    if (Array.isArray(j.detail)) {
+      return j.detail
+        .map((x) =>
+          typeof x === "object" && x !== null && "msg" in x
+            ? String((x as { msg: unknown }).msg)
+            : String(x),
+        )
+        .join("; ");
+    }
+  } catch {
+    /* plain text */
+  }
+  return t;
+}
 
 export type TaskCreateBody = {
   requester_wallet: string;
@@ -35,7 +66,7 @@ export async function createTask(
   });
   const text = await r.text();
   if (!r.ok) {
-    throw new Error(text || `${r.status} ${r.statusText}`);
+    throw new Error(parseFastApiDetail(text) || `${r.status} ${r.statusText}`);
   }
   return JSON.parse(text) as CreateTaskResponse;
 }

@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { type Address, getAddress, type Hex } from "viem";
-import { useAccount, useSignTypedData } from "wagmi";
+import { useAccount, useChainId, useSignTypedData, useSwitchChain } from "wagmi";
 
 import { usePrivyConfigured } from "@/app/providers";
 import { BtnPrimary } from "@/components/ui/Button";
-import { createTask, type TaskCreateBody } from "@/lib/api";
-import { ESCROW_FEE_BPS, feeMicrosFromBounty } from "@/lib/constants";
+import { createTask, getEscrowFeeBps, type TaskCreateBody } from "@/lib/api";
+import { ESCROW_FEE_BPS } from "@/lib/constants";
+import { opBNBTestnet } from "@/lib/chains";
+import { readInjectedChainId } from "@/lib/read-injected-chain-id";
 import {
   authorizationFromSignature,
   buildTransferWithAuthorizationSignArgs,
@@ -42,8 +44,10 @@ export function PostTaskForm() {
   const privyOk = usePrivyConfigured();
   const { authenticated, login } = usePrivy();
   const { address } = useAccount();
+  const wagmiChainId = useChainId();
   const { wallets } = useWallets();
   const { signTypedDataAsync } = useSignTypedData();
+  const { switchChainAsync } = useSwitchChain();
 
   const wallet =
     (address as string | undefined) ||
@@ -68,6 +72,11 @@ export function PostTaskForm() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [result, setResult] = useState<{ task_id: string; tx?: string } | null>(null);
+  const [escrowFeeBps, setEscrowFeeBps] = useState(ESCROW_FEE_BPS);
+
+  useEffect(() => {
+    getEscrowFeeBps().then(setEscrowFeeBps).catch(() => {});
+  }, []);
 
   const bountyMicros = useMemo(() => {
     const n = parseFloat(bountyUsdc);
@@ -75,7 +84,10 @@ export function PostTaskForm() {
     return Math.round(n * 1_000_000);
   }, [bountyUsdc]);
 
-  const feeMicros = useMemo(() => feeMicrosFromBounty(bountyMicros), [bountyMicros]);
+  const feeMicros = useMemo(
+    () => Math.floor((bountyMicros * escrowFeeBps) / 10_000),
+    [bountyMicros, escrowFeeBps],
+  );
   const totalMicros = bountyMicros + feeMicros;
 
   const mockUsdc = getMockUsdcAddressEnv();
@@ -122,6 +134,29 @@ export function PostTaskForm() {
           return;
         }
         if (mockUsdc && escrow) {
+          let injected = await readInjectedChainId();
+          const mustSwitch =
+            injected != null
+              ? injected !== opBNBTestnet.id
+              : wagmiChainId !== opBNBTestnet.id;
+          if (mustSwitch) {
+            await switchChainAsync({ chainId: opBNBTestnet.id });
+          }
+          if (injected != null) {
+            for (let i = 0; i < 45; i++) {
+              injected = await readInjectedChainId();
+              if (injected === opBNBTestnet.id) break;
+              await new Promise<void>((resolve) => {
+                requestAnimationFrame(() => resolve());
+              });
+            }
+            if (injected !== opBNBTestnet.id) {
+              setErr(
+                "Your wallet must be on opBNB Testnet (chain 5611) to sign. Approve the network switch in MetaMask if prompted, then click Publish again.",
+              );
+              return;
+            }
+          }
           const validAfter = 0;
           const validBefore = Math.floor(Date.now() / 1000) + 600;
           const nonce = randomNonceHex32();
@@ -169,9 +204,12 @@ export function PostTaskForm() {
       totalMicros,
       deadlineLocal,
       skipPayment,
+      escrowFeeBps,
       mockUsdc,
       escrow,
       signTypedDataAsync,
+      switchChainAsync,
+      wagmiChainId,
     ],
   );
 
@@ -297,7 +335,7 @@ export function PostTaskForm() {
 
       <div className="rounded-[14px] border border-az-stroke-2 bg-white/[0.02] px-4 py-3 text-sm text-az-muted-2">
         <p>
-          Escrow fee ({ESCROW_FEE_BPS / 100}% of bounty):{" "}
+          Escrow fee ({(escrowFeeBps / 100).toFixed(2)}% of bounty):{" "}
           <span className="font-mono text-az-text">
             {(feeMicros / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC
           </span>
@@ -333,7 +371,9 @@ export function PostTaskForm() {
         </label>
       ) : null}
 
-      {err ? <p className="text-sm text-amber-300/90 [text-wrap:pretty]">{err}</p> : null}
+      {err ? (
+        <p className="text-sm text-amber-300/90 [text-wrap:pretty] whitespace-pre-wrap">{err}</p>
+      ) : null}
 
       <BtnPrimary type="submit" disabled={busy}>
         {busy ? "Publishing…" : "Publish task"}

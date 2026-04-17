@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 import time
+from pathlib import Path
 from typing import Any
 
 from eth_account import Account
@@ -13,6 +14,22 @@ from eth_account.messages import encode_typed_data
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from web3 import Web3
+
+
+def _load_repo_env() -> None:
+    """Load monorepo root `.env` (and optional `facilitator/.env`) like the FastAPI app — raw `uvicorn` does not."""
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    root = Path(__file__).resolve().parents[2]
+    load_dotenv(root / ".env")
+    fac_env = root / "facilitator" / ".env"
+    if fac_env.is_file():
+        load_dotenv(fac_env, override=True)
+
+
+_load_repo_env()
 
 app = FastAPI(title="Execution Market x402 Facilitator", version="0.1.0")
 

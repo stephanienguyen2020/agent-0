@@ -15,6 +15,7 @@ import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 from web3 import Web3
+from web3.exceptions import ContractLogicError
 
 from em_api.config import settings
 from em_api.constants import ESCROW_FEE_BPS
@@ -56,10 +57,6 @@ class TaskAcceptBody(BaseModel):
 class TaskSubmitBody(BaseModel):
     evidence: dict[str, Any]
     filename: str = "evidence.bin"
-
-
-def _fee_micros(bounty: int) -> int:
-    return bounty * ESCROW_FEE_BPS // 10_000
 
 
 def _validate_x402_create(auth: dict, body: TaskCreate, total_micros: int) -> None:
@@ -147,6 +144,14 @@ def list_tasks(status: str | None = None) -> dict:
     return {"tasks": rows.data}
 
 
+@router.get("/escrow-fee-bps")
+def escrow_fee_bps(chain=Depends(get_chain)) -> dict:
+    """Basis points used by deployed EMEscrow for platform fee — must match EIP-3009 signed amount."""
+    live = chain.escrow_fee_bps()
+    bps = live if live is not None else ESCROW_FEE_BPS
+    return {"fee_bps": bps, "source": "chain" if live is not None else "default"}
+
+
 @router.post("")
 def create_task(request: Request, body: TaskCreate, chain=Depends(get_chain)) -> dict:
     supa = get_supabase()
@@ -154,16 +159,25 @@ def create_task(request: Request, body: TaskCreate, chain=Depends(get_chain)) ->
         raise HTTPException(503, "Supabase not configured")
     agent_id = _ensure_agent(supa, body.requester_wallet, body.requester_erc8004_id)
     task_id = "tk_" + uuid.uuid4().hex
-    fee = _fee_micros(body.bounty_micros)
+    fee_bps_live = chain.escrow_fee_bps()
+    fee_bps = fee_bps_live if fee_bps_live is not None else ESCROW_FEE_BPS
+    fee = body.bounty_micros * fee_bps // 10_000
     total_micros = body.bounty_micros + fee
     deadline = body.deadline_at
     if deadline.tzinfo is None:
         deadline = deadline.replace(tzinfo=timezone.utc)
     deadline_unix = int(deadline.timestamp())
 
-    use_x402 = settings.x402_enforce and not (
+    # x402 path: settle EIP-3009 then publishTaskX402 (USDC already in escrow).
+    # When X402_ENFORCE is false (default), still honor an X-PAYMENT header so the signed
+    # frontend works; otherwise we fall back to publishTask which does transferFrom(requester)
+    # and reverts unless the requester has approved MockUSDC to the escrow.
+    skip_payment_dev = (
         settings.environment == "development" and request.headers.get("X-PAYMENT-SKIP") == "1"
     )
+    has_x_payment = bool(request.headers.get("X-PAYMENT"))
+    use_x402 = not skip_payment_dev and (settings.x402_enforce or has_x_payment)
+
     x402_settle_tx: str | None = None
     if use_x402:
         raw = request.headers.get("X-PAYMENT")
@@ -181,25 +195,47 @@ def create_task(request: Request, body: TaskCreate, chain=Depends(get_chain)) ->
         except httpx.HTTPStatusError as e:
             raise HTTPException(502, e.response.text) from e
         except httpx.RequestError as e:
-            raise HTTPException(502, f"facilitator unreachable: {e}") from e
+            # 503: upstream settlement service unavailable (connection refused if not running).
+            detail = (
+                f"facilitator unreachable ({e}). "
+                "Run the x402 facilitator and point X402_FACILITATOR_URL at it "
+                "(from repo root: docker compose up facilitator — see facilitator/README.md)."
+            )
+            raise HTTPException(503, detail) from e
         x402_settle_tx = out.get("txHash")
-        tx_hash = chain.publish_task_x402(
-            task_id,
-            body.requester_wallet,
-            body.requester_erc8004_id,
-            body.category,
-            body.bounty_micros,
-            deadline_unix,
-        )
+        try:
+            tx_hash = chain.publish_task_x402(
+                task_id,
+                body.requester_wallet,
+                body.requester_erc8004_id,
+                body.category,
+                body.bounty_micros,
+                deadline_unix,
+            )
+        except ContractLogicError as e:
+            logger.warning("publish_task_x402 reverted: %s", e)
+            raise HTTPException(
+                502,
+                "publishTaskX402 reverted on-chain (check deadline is in the future on opBNB; "
+                "EM_AGENT_PRIVATE_KEY matches an account with EM_AGENT_ROLE on EMEscrow; "
+                "signed USDC amount matches GET /api/v1/tasks/escrow-fee-bps for this bounty).",
+            ) from e
     else:
-        tx_hash = chain.publish_task(
-            task_id,
-            body.requester_wallet,
-            body.requester_erc8004_id,
-            body.category,
-            body.bounty_micros,
-            deadline_unix,
-        )
+        try:
+            tx_hash = chain.publish_task(
+                task_id,
+                body.requester_wallet,
+                body.requester_erc8004_id,
+                body.category,
+                body.bounty_micros,
+                deadline_unix,
+            )
+        except ContractLogicError as e:
+            logger.warning("publish_task reverted: %s", e)
+            raise HTTPException(
+                502,
+                "publishTask reverted on-chain (allowance for MockUSDC → EMEscrow, deadline, or EM_AGENT_ROLE).",
+            ) from e
 
     row = {
         "task_id": task_id,

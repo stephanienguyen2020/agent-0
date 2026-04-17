@@ -6,6 +6,7 @@ import { http } from "wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createContext, useContext, useState, type ReactNode } from "react";
 
+import { SyncOpBNBChain } from "@/components/wallet/SyncOpBNBChain";
 import { opBNBTestnet } from "@/lib/chains";
 
 export const PrivyEnabledContext = createContext(false);
@@ -41,7 +42,10 @@ function PrivyStack({ children }: { children: ReactNode }) {
       }}
     >
       <QueryClientProvider client={queryClient}>
-        <WagmiProvider config={wagmiConfig}>{children}</WagmiProvider>
+        <WagmiProvider config={wagmiConfig}>
+          <SyncOpBNBChain />
+          {children}
+        </WagmiProvider>
       </QueryClientProvider>
     </PrivyProvider>
   );

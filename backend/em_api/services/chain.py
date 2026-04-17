@@ -76,6 +76,13 @@ EM_ESCROW_ABI: list[dict[str, Any]] = [
         "stateMutability": "nonpayable",
         "type": "function",
     },
+    {
+        "inputs": [],
+        "name": "feeBps",
+        "outputs": [{"internalType": "uint16", "name": "", "type": "uint16"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
 ]
 
 
@@ -103,6 +110,8 @@ def category_to_uint(category: str) -> int:
         "human_authority": 2,
         "simple_action": 3,
         "digital_physical": 4,
+        # Frontend-only label until escrow adds enum variant — same uint as DigitalPhysical on-chain.
+        "agent_to_agent": 4,
     }
     if category not in m:
         raise ValueError(f"unknown category {category}")
@@ -129,6 +138,15 @@ class ChainService:
             return self._w3.is_connected() and self._w3.eth.block_number >= 0
         except Exception:
             return False
+
+    def escrow_fee_bps(self) -> int | None:
+        """Deployed escrow fee numerator (basis points); source of truth for EIP-3009 totals."""
+        if not self._escrow:
+            return None
+        try:
+            return int(self._escrow.functions.feeBps().call())
+        except Exception:
+            return None
 
     def publish_task(
         self,
