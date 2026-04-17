@@ -3,13 +3,87 @@
 @tailwind utilities;
 
 :root {
-  --bg: #0b0f14;
-  --fg: #e8eef5;
-  --muted: #8a9bb0;
-  --accent: #f0b90b;
+  --green: #b6f24a;
+  --green-soft: #cdf56a;
+  --green-dim: rgba(182, 242, 74, 0.12);
+  --bg: #05100b;
+  --panel: rgba(18, 28, 24, 0.55);
+  --panel-solid: #0e1a14;
+  --stroke: rgba(255, 255, 255, 0.06);
+  --stroke-2: rgba(255, 255, 255, 0.09);
+  --text: #e8f1ea;
+  --muted: #6b7d72;
+  --muted-2: #8a9a90;
+  --red: #ef4a7a;
+  --blue: #5b9cf5;
+  --orange: #f5a623;
+  --purple: #a78bfa;
+  --radius: 20px;
+  /* Aliases for legacy utility classes */
+  --fg: var(--text);
+  --accent: var(--green);
 }
 
-body {
-  color: var(--fg);
-  background: var(--bg);
+@layer base {
+  html,
+  body {
+    @apply min-h-screen antialiased text-az-text bg-az-bg;
+    font-family: var(--font-manrope), system-ui, sans-serif;
+  }
+
+  body {
+    background: radial-gradient(ellipse 1100px 800px at 15% 25%, rgba(100, 190, 80, 0.14), transparent 60%),
+      radial-gradient(ellipse 900px 600px at 80% 80%, rgba(70, 160, 90, 0.12), transparent 60%), var(--bg);
+  }
+}
+
+@layer components {
+  .az-card {
+    @apply rounded-az border border-az-stroke-2 backdrop-blur-[14px];
+    background-image: linear-gradient(180deg, rgba(20, 32, 26, 0.7), rgba(12, 20, 16, 0.55));
+  }
+
+  .az-glass {
+    @apply rounded-az border border-az-stroke-2 backdrop-blur-xl;
+    background: linear-gradient(180deg, rgba(28, 42, 34, 0.5), rgba(14, 22, 18, 0.45));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 20px 50px -20px rgba(0, 0, 0, 0.5);
+  }
+
+  .az-nav-active {
+    @apply border border-white/[0.08] font-semibold text-white;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  }
+
+  .az-mono {
+    font-family: var(--font-jetbrains), ui-monospace, monospace;
+  }
+
+  @keyframes az-fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .az-animate-fade-up {
+    animation: az-fade-up 0.5s ease both;
+  }
+
+  @keyframes az-pulse-dot {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.3;
+    }
+  }
+
+  .az-pulse {
+    animation: az-pulse-dot 1.5s infinite;
+  }
 }

@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Frontend (AgentZero UI):** Ported `files/*.html` into Next.js — `AppShell` with sidebar + active routes, `Topbar` + `AvatarChip` (Privy/wagmi), Manrope / JetBrains Mono, `az-*` design tokens and glass cards; dashboard stats/charts on `/`; market grid + filters on `/tasks`; `/my-tasks` with tabs, lifecycle bar, and task table; `/agents` directory (demo cards); `/wallet` with native balance (`useBalance`) and placeholder escrow/USDC; leaderboard podium + table (stub until Supabase view). New routes: `/my-tasks`, `/agents`, `/wallet`.
 - **x402 (EIP-3009):** Python facilitator service in `facilitator/` (`POST /verify`, `POST /settle`, `GET /healthz`) with Dockerfile; backend `em_api.services.x402_signer`, `x402_facilitator`, `X402_ENFORCE` + dynamic 402 amounts on `POST /api/v1/tasks`, base64 `X-PAYMENT` validation and settle-before-publish flow.
 - **EMEscrow:** `publishTaskX402` and `totalUSDCCommitted` accounting so USDC can arrive via EIP-3009 to the escrow before task creation (paired with x402 settle).
 - Frontend: **Privy** + `@privy-io/wagmi` + TanStack Query, opBNB Testnet chain helper, header wallet controls, task detail **accept / multipart submit / verify** actions against FastAPI.
@@ -29,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Frontend:** Layout is sidebar + main content (replaces header-only nav); metadata/title use AgentZero branding; `next.config.ts` adds `outputFileTracingRoot` for correct file tracing when multiple lockfiles exist.
 - **Contracts:** Redeploy **EMEscrow** required to pick up `publishTaskX402` / `totalUSDCCommitted` (existing `publishTask` unchanged for callers but updates committed balance tracking).
 - **Backend:** `BACKEND_PUBLIC_URL` / `backend_public_url` for x402 `resource` in 402 responses; `eth-account` dependency for EIP-712 signing helpers.
 - Renamed `docs/02-technical-architecture (1).md` to `docs/02-technical-architecture.md` for consistent cross-links.
