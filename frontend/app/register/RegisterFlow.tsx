@@ -8,7 +8,21 @@ import { useCallback, useState } from "react";
 import { useAccount } from "wagmi";
 
 import { usePrivyConfigured } from "@/app/providers";
+import { BtnPrimary } from "@/components/ui/Button";
 import { getApiBase } from "@/lib/api-base";
+
+function shortAddr(a: string) {
+  if (a.length < 14) return a;
+  return `${a.slice(0, 8)}…${a.slice(-6)}`;
+}
+
+function chipClass(active: boolean) {
+  return `rounded-[14px] border px-4 py-2.5 text-xs font-semibold transition sm:text-[13px] ${
+    active
+      ? "border-[rgba(182,242,74,0.3)] bg-[rgba(182,242,74,0.06)] text-[#cdf56a]"
+      : "border-az-stroke-2 bg-white/[0.04] text-az-muted-2 hover:border-white/[0.15] hover:text-az-text"
+  }`;
+}
 
 function RegisterFlowInner() {
   const { authenticated, login } = usePrivy();
@@ -81,34 +95,52 @@ function RegisterFlowInner() {
 
   if (!authenticated) {
     return (
-      <button
-        type="button"
-        onClick={() => login()}
-        className="rounded-lg bg-[var(--accent)]/90 px-4 py-2 text-sm font-medium text-black"
-      >
-        Connect wallet to register
-      </button>
+      <div className="space-y-4">
+        <p className="text-sm text-az-muted-2">Sign in with Privy to link a wallet before World ID verification.</p>
+        <BtnPrimary type="button" onClick={() => login()}>
+          Connect wallet to register
+        </BtnPrimary>
+      </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-[var(--muted)]">
-        Wallet: <code className="rounded bg-white/10 px-1">{wallet || "—"}</code>
-      </p>
-      <label className="flex cursor-pointer items-center gap-2 text-sm">
-        <input type="checkbox" checked={orbMode} onChange={(e) => setOrbMode(e.target.checked)} />
-        Require Orb (for high-bounty tasks)
-      </label>
-      <button
-        type="button"
-        onClick={() => void startVerify()}
-        className="rounded-lg border border-white/20 px-4 py-2 text-sm font-medium"
-      >
+    <div className="space-y-6">
+      <div>
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-az-muted">Signing address</p>
+        <div className="rounded-[14px] border border-az-stroke-2 bg-white/[0.03] px-4 py-3">
+          <p className="az-mono text-sm text-az-text" title={wallet}>
+            {wallet ? shortAddr(wallet) : "—"}
+          </p>
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-az-muted">Verification level</p>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className={chipClass(!orbMode)} onClick={() => setOrbMode(false)}>
+            Device
+          </button>
+          <button type="button" className={chipClass(orbMode)} onClick={() => setOrbMode(true)}>
+            Orb (high-bounty tasks)
+          </button>
+        </div>
+      </div>
+
+      <BtnPrimary type="button" onClick={() => void startVerify()}>
         Verify with World ID
-      </button>
-      {err && <p className="text-sm text-amber-300">{err}</p>}
-      {ok && <p className="text-sm text-emerald-400">{ok}</p>}
+      </BtnPrimary>
+
+      {err && (
+        <div className="rounded-[14px] border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          {err}
+        </div>
+      )}
+      {ok && (
+        <div className="rounded-[14px] border border-emerald-500/35 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+          {ok}
+        </div>
+      )}
 
       {appId && rp && (
         <IDKitRequestWidget
@@ -132,10 +164,14 @@ export function RegisterFlow() {
   const configured = usePrivyConfigured();
   if (!configured) {
     return (
-      <p className="text-sm text-[var(--muted)]">
-        Set <code className="rounded bg-white/10 px-1">NEXT_PUBLIC_PRIVY_APP_ID</code> then connect your wallet, then
-        complete World ID below.
-      </p>
+      <div className="space-y-3 rounded-[14px] border border-amber-500/25 bg-amber-500/5 px-4 py-4 text-sm text-az-muted-2">
+        <p className="font-medium text-amber-200/90">Wallet UI is not configured</p>
+        <p>
+          Set <code className="az-mono rounded bg-white/10 px-1.5 py-0.5 text-[13px]">NEXT_PUBLIC_PRIVY_APP_ID</code> in{" "}
+          <code className="az-mono rounded bg-white/10 px-1 py-0.5">frontend/.env.local</code>, then reload and connect your
+          wallet to complete World ID below.
+        </p>
+      </div>
     );
   }
   return <RegisterFlowInner />;

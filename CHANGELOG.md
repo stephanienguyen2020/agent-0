@@ -30,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Frontend:** `/register` — AgentZero-style hero strip, main flow inside `Card`, developer env documentation in a collapsible `<details>`; `RegisterFlow` uses `BtnPrimary`, device vs Orb chip toggle, signing-address panel, and bordered success/error alerts; Privy-disabled state uses a consistent notice panel.
 - **Frontend:** Layout is sidebar + main content (replaces header-only nav); metadata/title use AgentZero branding; `next.config.ts` adds `outputFileTracingRoot` for correct file tracing when multiple lockfiles exist.
 - **Contracts:** Redeploy **EMEscrow** required to pick up `publishTaskX402` / `totalUSDCCommitted` (existing `publishTask` unchanged for callers but updates committed balance tracking).
 - **Backend:** `BACKEND_PUBLIC_URL` / `backend_public_url` for x402 `resource` in 402 responses; `eth-account` dependency for EIP-712 signing helpers.
@@ -40,5 +41,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Frontend: `suppressHydrationWarning` on root `<html>` and `<body>` so browser extensions that inject attributes (e.g. Phia `data-phia-extension-fonts-loaded`) do not trigger React hydration mismatch warnings in dev.
 - Backend: `Settings` loads the monorepo root `.env` and then `backend/.env` (when present) so `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` resolve when uvicorn’s cwd is `backend/`.
 - Frontend build: internal navigation uses `next/link` per ESLint `no-html-link-for-pages`.
