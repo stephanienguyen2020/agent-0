@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- World ID register: freeze the wallet used as IDKit `signal` when opening verification (`boundSignal` via `getAddress`) and POST the same checksummed address; skip redundant local `signal_hash` vs wallet check after successful **v4** Developer verify (`WORLD_ID_RP_ID` set), since protocol 3.x payloads can omit or relocate `signal_hash` on `responses[0]` while World already validated the proof.
+- World ID: reject IDKit **3.x/4.x** proofs when `WORLD_ID_RP_ID` is missing on the API (503 with a clear message) instead of incorrectly calling the **v2** verify endpoint, which caused `invalid_action` / "Action not found." Documented that `WORLD_ID_RP_ID` must be set in repo root or `backend/.env` for FastAPI, matching `frontend/.env`.
 - Frontend: `suppressHydrationWarning` on root `<html>` and `<body>` so browser extensions that inject attributes (e.g. Phia `data-phia-extension-fonts-loaded`) do not trigger React hydration mismatch warnings in dev.
 - Backend: `Settings` loads the monorepo root `.env` and then `backend/.env` (when present) so `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` resolve when uvicorn’s cwd is `backend/`.
 - Frontend build: internal navigation uses `next/link` per ESLint `no-html-link-for-pages`.

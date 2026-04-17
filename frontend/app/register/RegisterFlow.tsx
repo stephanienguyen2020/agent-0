@@ -5,6 +5,7 @@ import { deviceLegacy, orbLegacy } from "@worldcoin/idkit-core";
 import type { IDKitResult, RpContext } from "@worldcoin/idkit-core";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { useCallback, useState } from "react";
+import { getAddress } from "viem";
 import { useAccount } from "wagmi";
 
 import { usePrivyConfigured } from "@/app/providers";
@@ -31,6 +32,8 @@ function RegisterFlowInner() {
   const [orbMode, setOrbMode] = useState(false);
   const [open, setOpen] = useState(false);
   const [rp, setRp] = useState<RpContext | null>(null);
+  /** Wallet address frozen when starting verification — must match IDKit `signal` or backend signal_hash check fails. */
+  const [boundSignal, setBoundSignal] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
 
@@ -77,28 +80,43 @@ function RegisterFlowInner() {
     }
     const ctx = await loadRp();
     if (!ctx) return;
+    try {
+      setBoundSignal(getAddress(wallet));
+    } catch {
+      setErr("Invalid EVM wallet address for World ID signal.");
+      return;
+    }
     setOpen(true);
   }, [appId, loadRp, wallet]);
 
   const handleVerify = useCallback(
     async (result: IDKitResult) => {
-      if (!wallet) return;
+      const raw = boundSignal ?? wallet;
+      if (!raw) return;
+      let normalized: string;
+      try {
+        normalized = getAddress(raw);
+      } catch {
+        setErr("Invalid wallet address for World ID signal.");
+        return;
+      }
       const api = getApiBase();
       const r = await fetch(`${api}/api/v1/world-id/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wallet, idkit_result: result }),
+        body: JSON.stringify({ wallet: normalized, idkit_result: result }),
       });
       if (!r.ok) {
         const t = await r.text();
         throw new Error(t || r.statusText);
       }
       setOk(
-        "Verified — you can accept tasks (Orb required for high bounties).",
+        "Verified - you can accept tasks (Orb required for high bounties).",
       );
       setOpen(false);
+      setBoundSignal(null);
     },
-    [wallet],
+    [boundSignal, wallet],
   );
 
   if (!authenticated) {
@@ -167,15 +185,18 @@ function RegisterFlowInner() {
       {appId && rp && (
         <IDKitRequestWidget
           open={open}
-          onOpenChange={setOpen}
+          onOpenChange={(o) => {
+            setOpen(o);
+            if (!o) setBoundSignal(null);
+          }}
           app_id={appId}
           action={action}
           rp_context={rp}
           allow_legacy_proofs
           preset={
             orbMode
-              ? orbLegacy({ signal: wallet! })
-              : deviceLegacy({ signal: wallet! })
+              ? orbLegacy({ signal: (boundSignal ?? wallet)! })
+              : deviceLegacy({ signal: (boundSignal ?? wallet)! })
           }
           onSuccess={() => {}}
           handleVerify={(res) => void handleVerify(res)}

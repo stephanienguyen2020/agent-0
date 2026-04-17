@@ -70,6 +70,16 @@ async def verify_world_id(body: WorldIdVerifyBody) -> dict:
                 if isinstance(proof, list) and len(proof) >= 5:
                     merkle_root = proof[-1]
 
+        protocol_version = body.idkit_result.get("protocol_version")
+        # IDKit 3.x/4.x payloads must use Developer API v4 with RP; v2 fallback is invalid for these proofs.
+        if protocol_version in ("3.0", "4.0") and not settings.world_id_rp_id:
+            raise HTTPException(
+                503,
+                "WORLD_ID_RP_ID must be set on the API for IDKit 3.x/4.x proofs. "
+                "Add WORLD_ID_RP_ID to the repo root .env or backend/.env (same value as in frontend/.env). "
+                "Without it, verification incorrectly used the v2 endpoint and World returned errors such as invalid_action.",
+            )
+
         if settings.world_id_rp_id:
             url = f"{WORLD_VERIFY_V4}/{settings.world_id_rp_id}"
             payload = body.idkit_result
@@ -103,7 +113,8 @@ async def verify_world_id(body: WorldIdVerifyBody) -> dict:
         if "success" in data and data.get("success") is not True:
             raise HTTPException(400, f"World ID rejected proof: {data}")
 
-        if item and body.wallet:
+        # v4 Developer verify already binds signal; protocol 3.x may not mirror signal_hash on responses[0].
+        if item and body.wallet and not settings.world_id_rp_id:
             sh = item.get("signal_hash")
             if sh and isinstance(sh, str) and sh != "0x0":
                 expected = world_id_signal_digest(body.wallet)
