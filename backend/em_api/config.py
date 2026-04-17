@@ -1,9 +1,24 @@
+from pathlib import Path
+
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Load monorepo root `.env` when the API is started from `backend/` (cwd-only `.env` would miss it).
+_BACKEND_DIR = Path(__file__).resolve().parent.parent
+_REPO_ROOT = _BACKEND_DIR.parent
+
+
+def _dotenv_files() -> tuple[str, ...]:
+    ordered = (_REPO_ROOT / ".env", _BACKEND_DIR / ".env")
+    return tuple(str(p) for p in ordered if p.is_file())
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=_dotenv_files(),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     environment: str = "development"
     log_level: str = "info"

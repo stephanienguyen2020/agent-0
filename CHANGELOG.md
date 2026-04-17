@@ -38,4 +38,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Backend: `Settings` loads the monorepo root `.env` and then `backend/.env` (when present) so `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` resolve when uvicorn’s cwd is `backend/`.
 - Frontend build: internal navigation uses `next/link` per ESLint `no-html-link-for-pages`.
