@@ -1,4 +1,4 @@
--- Execution Market — core schema (see docs/07-database-schema.md)
+-- Agent Zero — core schema (see docs/07-database-schema.md)
 
 create extension if not exists "uuid-ossp";
 create extension if not exists "pgcrypto";

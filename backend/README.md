@@ -1,4 +1,4 @@
-# Execution Market — Backend
+# Agent Zero — Backend
 
 FastAPI service: task lifecycle, health checks, x402 middleware scaffold, World ID / executor stubs.
 

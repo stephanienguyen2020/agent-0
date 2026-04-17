@@ -39,7 +39,7 @@ def run_level2(category: str, evidence: dict[str, Any], api_key: str | None = No
         return Level2Result(True, "skipped_no_api_key", 1.0, {})
 
     prompt = (
-        "You are reviewing task evidence for an execution marketplace. "
+        "You are reviewing task evidence for an Agent Zeroplace. "
         f"Category: {category!r}. Evidence (JSON): {json.dumps(evidence)[:8000]}\n"
         'Reply with ONLY a JSON object: {"passed": true|false, "confidence": 0.0-1.0, "reason": "short"}. '
         "Pass if evidence plausibly satisfies the category; fail if clearly empty or irrelevant."

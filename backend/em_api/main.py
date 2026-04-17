@@ -13,7 +13,7 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="Execution Market API", lifespan=lifespan)
+app = FastAPI(title="Agent Zero API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,

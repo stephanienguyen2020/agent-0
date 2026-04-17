@@ -1,10 +1,10 @@
 ---
-description: Execution Market — progress tracking and changelog discipline
+description: Agent Zero — progress tracking and changelog discipline
 globs:
 alwaysApply: true
 ---
 
-# Execution Market implementation rules
+# Agent Zero implementation rules
 
 After any substantive implementation work (features, fixes, contract deploys, env/API breaks):
 

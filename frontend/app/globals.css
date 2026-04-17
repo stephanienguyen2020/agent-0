@@ -86,4 +86,630 @@
   .az-pulse {
     animation: az-pulse-dot 1.5s infinite;
   }
+
+  /**
+   * Thin pill scrollbar for scrollable sidebars (dark panels).
+   * Track stays transparent so the thumb reads as a floating capsule.
+   */
+  .az-sidebar-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.32) transparent;
+  }
+
+  .az-sidebar-scroll::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .az-sidebar-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .az-sidebar-scroll::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.32);
+    border-radius: 999px;
+  }
+
+  .az-sidebar-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.48);
+  }
+
+  /**
+   * Global editorial tokens (Dashboard.html). Set on html[data-theme]; sidebar + dashboard consume via --ed-*.
+   */
+  html[data-theme="dark"] {
+    --ed-ease-spring: cubic-bezier(0.2, 0.9, 0.2, 1);
+    --ed-ease-smooth: cubic-bezier(0.22, 0.61, 0.36, 1);
+    --ed-bg: #0d0e0c;
+    --ed-bg-2: #141513;
+    --ed-ink: #f3f1e9;
+    --ed-ink-2: #d6d3c8;
+    --ed-mute: #8b887c;
+    --ed-line: #27282a;
+    --ed-line-2: #1c1d1e;
+    --ed-card: #17181a;
+    /* Dashboard.html dark — hue 150 */
+    --ed-accent: oklch(0.86 0.09 150);
+    --ed-accent-2: oklch(0.88 0.07 75);
+    --ed-danger: oklch(0.8 0.1 25);
+    /* Primary CTA label (Dashboard.html hero uses #0d0e0c on var(--accent)) */
+    --ed-on-accent: #0d0e0c;
+    --ed-shadow-soft: 0 1px 0 rgba(255, 255, 255, 0.02), 0 20px 40px -18px rgba(0, 0, 0, 0.6);
+    --ed-drawer-backdrop: rgba(0, 0, 0, 0.55);
+  }
+
+  html[data-theme="light"] {
+    --ed-ease-spring: cubic-bezier(0.2, 0.9, 0.2, 1);
+    --ed-ease-smooth: cubic-bezier(0.22, 0.61, 0.36, 1);
+    --ed-bg: #f6f5f1;
+    --ed-bg-2: #efede6;
+    --ed-ink: #111110;
+    --ed-ink-2: #2a2a27;
+    --ed-mute: #6c6a62;
+    --ed-line: #dcd8ce;
+    --ed-line-2: #e7e3d9;
+    --ed-card: #fffdf7;
+    /* Dashboard.html :root — hue 145, chroma 0.1 */
+    --ed-accent: oklch(0.72 0.1 145);
+    --ed-accent-2: oklch(0.78 0.08 75);
+    --ed-danger: oklch(0.68 0.11 25);
+    --ed-on-accent: #0d0e0c;
+    --ed-shadow-soft: 0 1px 0 rgba(0, 0, 0, 0.03), 0 10px 30px -12px rgba(0, 0, 0, 0.08);
+    --ed-drawer-backdrop: rgba(17, 17, 16, 0.35);
+  }
+
+  .app-sidebar {
+    background-color: var(--ed-bg);
+    color: var(--ed-ink);
+    border-color: var(--ed-line);
+    transition: background-color 0.5s var(--ed-ease-smooth), color 0.35s var(--ed-ease-smooth),
+      border-color 0.35s var(--ed-ease-smooth);
+  }
+
+  .app-sidebar.az-sidebar-scroll {
+    scrollbar-color: color-mix(in oklab, var(--ed-ink) 24%, transparent) transparent;
+  }
+
+  .app-sidebar.az-sidebar-scroll::-webkit-scrollbar-thumb {
+    background: color-mix(in oklab, var(--ed-ink) 28%, transparent);
+  }
+
+  .app-sidebar.az-sidebar-scroll::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklab, var(--ed-ink) 42%, transparent);
+  }
+
+  .app-sidebar .sidebar-nav-link {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 12px;
+    border-radius: 8px;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--ed-ink-2);
+    transition: background-color 0.2s var(--ed-ease-smooth), color 0.2s var(--ed-ease-smooth);
+  }
+
+  .app-sidebar .sidebar-nav-link:hover {
+    background: var(--ed-bg-2);
+    color: var(--ed-ink);
+  }
+
+  .app-sidebar .sidebar-nav-link[data-active="true"] {
+    background: var(--ed-bg-2);
+    color: var(--ed-ink);
+  }
+
+  .app-sidebar .sidebar-nav-link[data-active="true"]::before {
+    content: '';
+    position: absolute;
+    left: -16px;
+    top: 8px;
+    bottom: 8px;
+    width: 2px;
+    background: var(--ed-accent);
+    border-radius: 2px;
+  }
+
+  .app-sidebar button.sidebar-nav-link:disabled {
+    pointer-events: none;
+  }
+
+  .app-sidebar button.sidebar-nav-link:disabled:hover {
+    background: transparent;
+    color: inherit;
+  }
+
+  .app-sidebar .sidebar-nav-eyebrow {
+    font-family: var(--font-jetbrains), ui-monospace, monospace;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ed-mute);
+  }
+
+  .ed-nav-badge {
+    margin-left: auto;
+    border-radius: 999px;
+    padding: 1px 7px;
+    font-size: 10.5px;
+    font-weight: 600;
+    background: var(--ed-accent);
+    color: var(--ed-bg);
+  }
+
+  @media (min-width: 1024px) {
+    .app-sidebar[data-collapsed="true"] .sidebar-nav-text {
+      display: none;
+    }
+
+    .app-sidebar[data-collapsed="true"] .sidebar-nav-link {
+      position: relative;
+      justify-content: center;
+      gap: 0;
+      padding: 9px 8px;
+    }
+
+    .app-sidebar[data-collapsed="true"] .sidebar-nav-link[data-active="true"]::before {
+      left: 0;
+      top: 6px;
+      bottom: 6px;
+      width: 3px;
+    }
+
+    .app-sidebar[data-collapsed="true"] .ed-nav-badge {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      margin-left: 0;
+      padding: 0 4px;
+      font-size: 9px;
+      line-height: 1.25;
+    }
+  }
+
+  .theme-icon-btn {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    border: 1px solid var(--ed-line);
+    border-radius: 999px;
+    background: var(--ed-card);
+    color: var(--ed-ink);
+    display: grid;
+    place-items: center;
+    position: relative;
+    cursor: pointer;
+    transition: transform 0.15s var(--ed-ease-spring), background-color 0.2s, border-color 0.2s,
+      color 0.2s;
+  }
+
+  .theme-icon-btn:hover {
+    transform: translateY(-1px);
+  }
+
+  .theme-icon-btn:active {
+    transform: translateY(0) scale(0.98);
+  }
+
+  /* Main editorial pane: map --ed-* to legacy names used in dashboard components */
+  .dashboard-editorial {
+    --ease-spring: var(--ed-ease-spring);
+    --ease-smooth: var(--ed-ease-smooth);
+    --bg: var(--ed-bg);
+    --bg-2: var(--ed-bg-2);
+    --ink: var(--ed-ink);
+    --ink-2: var(--ed-ink-2);
+    --mute: var(--ed-mute);
+    --line: var(--ed-line);
+    --line-2: var(--ed-line-2);
+    --card: var(--ed-card);
+    --accent: var(--ed-accent);
+    --accent-2: var(--ed-accent-2);
+    --danger: var(--ed-danger);
+    --shadow-soft: var(--ed-shadow-soft);
+    --drawer-backdrop: var(--ed-drawer-backdrop);
+    background-color: var(--bg);
+    color: var(--ink);
+    transition: background-color 0.5s var(--ease-smooth), border-color 0.35s var(--ease-smooth),
+      color 0.35s var(--ease-smooth);
+  }
+
+  .dashboard-editorial ::selection {
+    background: var(--ink);
+    color: var(--bg);
+  }
+
+  /* Card primitive: use editorial tokens inside the dashboard/market shell */
+  .dashboard-editorial .az-card {
+    border-radius: 12px;
+    border: 1px solid var(--line) !important;
+    background: var(--card) !important;
+    background-image: none !important;
+    box-shadow: var(--shadow-soft);
+    backdrop-filter: none;
+  }
+
+  @keyframes dashboard-live-dot {
+    0%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.35;
+      transform: scale(0.85);
+    }
+  }
+
+  .dashboard-editorial .live-dot {
+    animation: dashboard-live-dot 1.6s ease-in-out infinite;
+  }
+
+  /* Editorial task list row — hover rail + nudge (design.md / Market.html) */
+  .dashboard-editorial .task-row {
+    position: relative;
+    transition: transform 0.35s var(--ease-spring), background 0.25s var(--ease-smooth);
+  }
+
+  .dashboard-editorial .task-row::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--accent);
+    transform: scaleY(0);
+    transform-origin: top;
+    transition: transform 0.35s var(--ease-spring);
+  }
+
+  .dashboard-editorial .task-row:hover {
+    background: var(--bg-2);
+    transform: translateX(4px);
+  }
+
+  .dashboard-editorial .task-row:hover::before {
+    transform: scaleY(1);
+  }
+
+  .dashboard-editorial .task-row:hover .arrow {
+    transform: translateX(4px);
+  }
+
+  .dashboard-editorial .arrow {
+    display: inline-block;
+    transition: transform 0.35s var(--ease-spring);
+  }
+
+  @keyframes dashboard-reveal {
+    from {
+      opacity: 0;
+      transform: translateY(14px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .dashboard-editorial .dashboard-reveal {
+    animation: dashboard-reveal 0.7s var(--ease-spring) both;
+  }
+
+  .dashboard-editorial .dashboard-reveal-d2 {
+    animation-delay: 60ms;
+  }
+
+  .dashboard-editorial .dashboard-reveal-d3 {
+    animation-delay: 140ms;
+  }
+
+  .dashboard-editorial .dashboard-reveal-d4 {
+    animation-delay: 220ms;
+  }
+
+  .dashboard-editorial .dashboard-btn {
+    transition: transform 0.15s var(--ease-spring), background-color 0.2s, color 0.2s, border-color 0.2s;
+  }
+
+  .dashboard-editorial .dashboard-btn:hover {
+    transform: translateY(-1px);
+  }
+
+  .dashboard-editorial .dashboard-btn:active {
+    transform: translateY(0) scale(0.98);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dashboard-editorial .dashboard-reveal {
+      animation: none !important;
+      opacity: 1 !important;
+      transform: none !important;
+    }
+
+    .dashboard-editorial .dashboard-btn:hover,
+    .dashboard-editorial .dashboard-btn:active {
+      transform: none;
+    }
+
+    .dashboard-editorial .live-dot {
+      animation: none !important;
+    }
+
+    .dashboard-editorial .task-row,
+    .dashboard-editorial .task-row::before,
+    .dashboard-editorial .task-row:hover,
+    .dashboard-editorial .task-row:hover::before,
+    .dashboard-editorial .task-row:hover .arrow {
+      transform: none !important;
+    }
+
+    .dashboard-editorial .task-row::before {
+      opacity: 0;
+    }
+
+    .dashboard-editorial .digit-pop {
+      animation: none !important;
+      opacity: 1 !important;
+      transform: none !important;
+    }
+
+    .dashboard-editorial .dashboard-icon-btn:hover,
+    .dashboard-editorial .dashboard-icon-btn:active {
+      transform: none;
+    }
+
+    .theme-icon-btn:hover,
+    .theme-icon-btn:active {
+      transform: none;
+    }
+  }
+
+  /* ── spot glow (mouse-tracking radial gradient) ─────────────────────── */
+  .dashboard-editorial .spot {
+    position: relative;
+    isolation: isolate;
+  }
+  .dashboard-editorial .spot::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: radial-gradient(
+      380px circle at var(--mx, 50%) var(--my, 50%),
+      color-mix(in oklab, var(--accent) 10%, transparent),
+      transparent 55%
+    );
+    opacity: 0;
+    transition: opacity 0.35s var(--ease-smooth);
+    z-index: 0;
+  }
+  .dashboard-editorial .spot:hover::before { opacity: 1; }
+  /* Decorative absolute layers use data-spot-decor so position isn’t forced to relative */
+  .dashboard-editorial .spot > *:not([data-spot-decor]) {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Dashboard.html hero: outer accent bloom + inset rim along top/right */
+  .dashboard-editorial .editorial-hero-card {
+    box-shadow:
+      var(--shadow-soft),
+      0 0 88px -28px color-mix(in oklab, var(--accent) 24%, transparent),
+      inset 0 1px 0 color-mix(in oklab, var(--ink) 10%, transparent),
+      inset 1px 0 0 color-mix(in oklab, var(--ink) 6%, transparent);
+  }
+
+  .dashboard-editorial .hero-primary-cta {
+    box-shadow:
+      0 0 0 1px color-mix(in oklab, var(--accent) 35%, transparent),
+      0 4px 24px -4px color-mix(in oklab, var(--accent) 50%, transparent),
+      0 12px 40px -12px color-mix(in oklab, var(--accent) 35%, transparent);
+  }
+
+  /* ── shine sweep on primary button ─────────────────────────────────── */
+  .dashboard-editorial .shine {
+    position: relative;
+    overflow: hidden;
+  }
+  .dashboard-editorial .shine::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      110deg,
+      transparent 30%,
+      color-mix(in oklab, var(--accent) 28%, transparent) 50%,
+      transparent 70%
+    );
+    transform: translateX(-100%);
+    animation: shine-sweep 3.2s var(--ease-smooth) infinite;
+  }
+
+  @keyframes shine-sweep {
+    0% { transform: translateX(-100%); }
+    55%, 100% { transform: translateX(100%); }
+  }
+
+  /* ── digit pop ──────────────────────────────────────────────────────── */
+  @keyframes digit-pop {
+    0%   { transform: translateY(8px) scale(0.97); opacity: 0; }
+    60%  { transform: translateY(-1px) scale(1.02); opacity: 1; }
+    100% { transform: none; opacity: 1; }
+  }
+  .digit-pop {
+    animation: digit-pop 0.55s var(--ease-spring, cubic-bezier(0.2, 0.9, 0.2, 1)) both;
+  }
+
+  /* ── sparkline draw-in ──────────────────────────────────────────────── */
+  @keyframes spark-draw { to { stroke-dashoffset: 0; } }
+  .spark-line {
+    stroke-dasharray: 1200;
+    stroke-dashoffset: 1200;
+    animation: spark-draw 1.6s ease 0.2s forwards;
+  }
+  @keyframes spark-fade-in { to { opacity: 1; } }
+  .spark-fill {
+    opacity: 0;
+    animation: spark-fade-in 0.9s ease 1s forwards;
+  }
+
+  /* ── category bar fill ──────────────────────────────────────────────── */
+  @keyframes bar-fill {
+    from { transform: scaleX(0); }
+    to   { transform: scaleX(var(--w, 1)); }
+  }
+  .cat-bar {
+    transform-origin: left center;
+    animation: bar-fill 1s var(--ease-spring, cubic-bezier(0.2, 0.9, 0.2, 1)) 0.3s both;
+  }
+
+  /* ── ring pulse for live dots ────────────────────────────────────────── */
+  @keyframes ring-pulse {
+    0%   { box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent) 55%, transparent); }
+    70%  { box-shadow: 0 0 0 10px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
+  }
+  .ring-pulse {
+    animation: ring-pulse 2s ease infinite;
+  }
+
+  /* ── editorial row borders ───────────────────────────────────────────── */
+  .ed-row {
+    border-bottom: 1px solid var(--line-2);
+  }
+  .ed-row:last-child {
+    border-bottom: none;
+  }
+
+  .dashboard-editorial .set-row {
+    display: grid;
+    grid-template-columns: 28px 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 12px 4px;
+    border-bottom: 1px solid var(--line-2);
+    cursor: pointer;
+    transition: background 0.2s var(--ease-smooth);
+  }
+  .dashboard-editorial .set-row:hover {
+    background: var(--bg-2);
+  }
+  .dashboard-editorial .set-row:last-child {
+    border-bottom: none;
+  }
+
+  .dashboard-editorial .agent-row {
+    display: grid;
+    grid-template-columns: 36px 1fr auto auto;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 4px;
+    border-bottom: 1px solid var(--line-2);
+    transition: background 0.2s var(--ease-smooth);
+  }
+  .dashboard-editorial .agent-row:hover {
+    background: var(--bg-2);
+  }
+  .dashboard-editorial .agent-row:last-child {
+    border-bottom: none;
+  }
+
+  .dashboard-editorial .dashboard-icon-btn {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--card);
+    color: var(--ink);
+    display: grid;
+    place-items: center;
+    position: relative;
+    transition: transform 0.15s var(--ease-spring), background-color 0.2s, border-color 0.2s,
+      color 0.2s;
+  }
+  .dashboard-editorial .dashboard-icon-btn:hover {
+    transform: translateY(-1px);
+  }
+  .dashboard-editorial .dashboard-icon-btn:active {
+    transform: translateY(0) scale(0.98);
+  }
+
+  /**
+   * Editorial wallet chip: soft halo behind the conic disc + inset “hollow” shading.
+   * Matches the Dashboard.html / reference glow that spills past the pill edge.
+   */
+  .dashboard-editorial .editorial-avatar-wrap {
+    position: relative;
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    overflow: visible;
+  }
+
+  .dashboard-editorial .editorial-avatar-glow {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    translate: -50% -50%;
+    width: 62px;
+    height: 62px;
+    border-radius: 999px;
+    pointer-events: none;
+    z-index: 0;
+    background: radial-gradient(
+      circle at 42% 36%,
+      color-mix(in oklab, oklch(0.5 0.1 265) 32%, transparent) 0%,
+      color-mix(in oklab, var(--accent) 26%, transparent) 45%,
+      transparent 72%
+    );
+    filter: blur(22px);
+    opacity: 0.9;
+  }
+
+  html[data-theme="light"] .editorial-avatar-glow {
+    background: radial-gradient(
+      circle at 42% 36%,
+      color-mix(in oklab, var(--accent) 38%, transparent) 0%,
+      color-mix(in oklab, var(--ink) 10%, transparent) 52%,
+      transparent 76%
+    );
+    filter: blur(18px);
+    opacity: 0.75;
+  }
+
+  .dashboard-editorial .editorial-wallet-avatar {
+    position: relative;
+    z-index: 1;
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fff;
+    background: conic-gradient(
+      from 120deg,
+      oklch(0.78 0.2 145),
+      oklch(0.7 0.22 240),
+      oklch(0.78 0.2 295),
+      oklch(0.78 0.2 145)
+    );
+    box-shadow:
+      0 0 0 1px color-mix(in oklab, var(--line) 45%, transparent),
+      inset 0 2px 5px color-mix(in oklab, var(--bg) 65%, transparent),
+      inset 0 -3px 8px color-mix(in oklab, var(--ink) 22%, transparent);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dashboard-editorial .editorial-avatar-glow {
+      filter: blur(12px);
+    }
+  }
 }

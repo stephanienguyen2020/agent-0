@@ -14,10 +14,11 @@ export function SidebarDisconnect() {
       <button
         type="button"
         disabled
-        className="flex w-full cursor-not-allowed items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-[13px] text-az-muted-2 opacity-60"
+        className="sidebar-nav-link mt-0.5 w-full cursor-not-allowed opacity-50"
+        title="Disconnect"
       >
-        <IconLogout className="h-4 w-4 shrink-0" />
-        Disconnect
+        <IconLogout className="h-4 w-4 shrink-0 opacity-90" />
+        <span className="sidebar-nav-text">Disconnect</span>
       </button>
     );
   }
@@ -26,10 +27,11 @@ export function SidebarDisconnect() {
     <button
       type="button"
       onClick={() => logout()}
-      className="flex w-full items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-left text-[13px] text-az-muted-2 transition hover:text-az-text"
+      className="sidebar-nav-link mt-0.5 w-full text-left text-[color:var(--ed-mute)] transition hover:text-[color:var(--ed-ink)]"
+      title="Disconnect wallet"
     >
-      <IconLogout className="h-4 w-4 shrink-0" />
-      Disconnect
+      <IconLogout className="h-4 w-4 shrink-0 opacity-90" />
+      <span className="sidebar-nav-text">Disconnect</span>
     </button>
   );
 }
