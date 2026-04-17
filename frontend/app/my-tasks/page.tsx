@@ -22,7 +22,7 @@ export default async function MyTasksPage() {
     <div>
       <TopbarSimple title="My Tasks">
         <Link
-          href="/tasks"
+          href="/tasks/new"
           className="inline-flex h-11 items-center gap-2 rounded-[14px] bg-az-btn-green px-5 text-[13px] font-bold text-[#0d1a0f] shadow-az-btn-green transition hover:-translate-y-px"
         >
           <IconPlus className="h-4 w-4" />

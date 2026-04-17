@@ -86,7 +86,7 @@ export function TasksMarket({ tasks }: { tasks: TaskRow[] }) {
           </button>
         ))}
         <Link
-          href="/my-tasks"
+          href="/tasks/new"
           className="ml-auto inline-flex h-11 items-center gap-2 rounded-[14px] bg-az-btn-green px-5 text-[13px] font-bold text-[#0d1a0f] shadow-az-btn-green transition hover:-translate-y-px hover:shadow-[0_12px_30px_-8px_rgba(180,240,90,0.55)]"
         >
           <IconPlus className="h-4 w-4" />
