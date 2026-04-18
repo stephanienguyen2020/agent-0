@@ -65,9 +65,17 @@ function EvidenceItemCard({ item }: { item: TaskEvidenceItem }) {
   const [imgErr, setImgErr] = useState(false);
   const ct = (item.content_type || "").toLowerCase();
   const fn = item.filename || "evidence";
-  const isPdf = ct.includes("pdf") || fn.toLowerCase().endsWith(".pdf");
+  const fnLower = fn.toLowerCase();
+  const isPdf = ct.includes("pdf") || fnLower.endsWith(".pdf");
+  /** HEIC/HEIF: poor `<img>` support in Chromium; show download UI instead of a broken preview. */
+  const isHeif =
+    ct.includes("heic") ||
+    ct.includes("heif") ||
+    fnLower.endsWith(".heic") ||
+    fnLower.endsWith(".heif");
   const isImg =
     !isPdf &&
+    !isHeif &&
     (ct.startsWith("image/") ||
       /\.(jpe?g|png|gif|webp|bmp|svg)(\?|$)/i.test(item.greenfield_url));
 
@@ -132,14 +140,20 @@ function EvidenceItemCard({ item }: { item: TaskEvidenceItem }) {
   return (
     <div className={shell}>
       <p className="truncate text-sm font-medium text-[color:var(--ink)]">{fn}</p>
+      {isHeif ? (
+        <p className="mt-1 text-xs text-[color:var(--mute)]">
+          Preview may not work in all browsers — open or download the file to view.
+        </p>
+      ) : null}
       {cap ? <p className="mt-1 text-xs text-[color:var(--mute)]">{cap}</p> : null}
       <a
         href={item.greenfield_url}
         target="_blank"
         rel="noopener noreferrer"
+        download={isHeif ? fn : undefined}
         className={`${linkCls} mt-2 inline-block`}
       >
-        Open file
+        {isHeif ? "Download / open" : "Open file"}
       </a>
     </div>
   );

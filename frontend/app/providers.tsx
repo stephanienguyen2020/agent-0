@@ -3,7 +3,16 @@
 import { PrivyProvider } from "@privy-io/react-auth";
 import { WagmiProvider } from "@privy-io/wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Children, createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  Children,
+  createContext,
+  isValidElement,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { SyncOpBNBChain } from "@/components/wallet/SyncOpBNBChain";
 import { opBNBTestnet } from "@/lib/chains";
@@ -34,25 +43,79 @@ function PrivyStack({ children }: { children: ReactNode }) {
 
   // #region agent log
   useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
     const arr = Children.toArray(children);
+    const segments = arr.map((c, i) => ({
+      i,
+      key: isValidElement(c) ? String(c.key ?? "") : null,
+      type:
+        isValidElement(c) && typeof c.type === "function"
+          ? (c.type as { name?: string }).name ?? "anonymous"
+          : isValidElement(c)
+            ? String(c.type)
+            : typeof c,
+    }));
     fetch("http://127.0.0.1:7675/ingest/a6edaa57-fc9c-4bd9-9435-f1ce83aaa252", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "b12d08" },
       body: JSON.stringify({
         sessionId: "b12d08",
         location: "providers.tsx:PrivyStack",
-        message: "Wagmi single-wrapper verification",
-        hypothesisId: "H_single_wagmi_child",
-        data: {
-          segmentChildCount: Children.count(children),
-          segmentToArrayLen: arr.length,
-          keyedWrapper: true,
-        },
+        message: "Providers segment children snapshot",
+        hypothesisId: "H_segments_keys",
+        data: { segmentChildCount: Children.count(children), segments },
         timestamp: Date.now(),
-        runId: "wagmi-contents-wrapper",
+        runId: "privy-3.22.1-key-verify",
       }),
     }).catch(() => {});
   }, [children]);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+    /** React often logs missing-key via `console.error`, not `console.warn`. */
+    const ingestKeyMessage = (channel: "warn" | "error", args: unknown[]) => {
+      const msg =
+        typeof args[0] === "string"
+          ? args[0]
+          : args.map((a) => (typeof a === "string" ? a : "")).join(" ");
+      if (!msg.includes("unique") || !msg.includes("key")) return;
+      fetch("http://127.0.0.1:7675/ingest/a6edaa57-fc9c-4bd9-9435-f1ce83aaa252", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "b12d08" },
+        body: JSON.stringify({
+          sessionId: "b12d08",
+          location: "providers.tsx:PrivyStack",
+          message: "React key warning intercepted",
+          hypothesisId: "H_react_key_warning_source",
+          data: {
+            channel,
+            prefix: msg.slice(0, 500),
+            rest: args
+              .slice(1)
+              .map((a) => (typeof a === "string" ? a : ""))
+              .join("|")
+              .slice(0, 400),
+          },
+          timestamp: Date.now(),
+          runId: "privy-3.22.1-key-verify",
+        }),
+      }).catch(() => {});
+    };
+    const prevWarn = console.warn;
+    const prevErr = console.error;
+    console.warn = (...args: unknown[]) => {
+      ingestKeyMessage("warn", args);
+      prevWarn.apply(console, args as Parameters<typeof console.warn>);
+    };
+    console.error = (...args: unknown[]) => {
+      ingestKeyMessage("error", args);
+      prevErr.apply(console, args as Parameters<typeof console.error>);
+    };
+    return () => {
+      console.warn = prevWarn;
+      console.error = prevErr;
+    };
+  }, []);
   // #endregion
 
   return (

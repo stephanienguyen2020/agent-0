@@ -1,5 +1,7 @@
 /** Latest submission’s files from `evidence_items` (GET task single). */
 export type TaskEvidenceItem = {
+  /** `evidence_items.id` — used for `/api/v1/evidence-files/{id}` when serving local dev uploads. */
+  id?: string;
   item_index: number;
   filename: string;
   content_type: string;

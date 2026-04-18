@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from em_api.config import settings
 from em_api.middleware.x402 import X402Middleware
-from em_api.routes import dashboard, disputes, executors, health, leaderboard, tasks, wallet_activity, world_id
+from em_api.routes import dashboard, disputes, evidence_files, executors, health, leaderboard, tasks, wallet_activity, world_id
 
 
 @asynccontextmanager
@@ -23,6 +23,7 @@ app.add_middleware(
 )
 app.add_middleware(X402Middleware)
 app.include_router(health.router)
+app.include_router(evidence_files.router)
 app.include_router(tasks.router)
 app.include_router(world_id.router)
 app.include_router(executors.router)

@@ -6,13 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **API:** **`GET /api/v1/evidence-files/{evidence_item_id}`** ([`backend/em_api/routes/evidence_files.py`](backend/em_api/routes/evidence_files.py)) streams dev **placeholder** evidence from **`/tmp/em-evidence/{task_id}/{filename}`** so browsers can open uploads ( **`file://`** URLs from the placeholder uploader did not work from the Next.js origin). **`GET /api/v1/tasks/{task_id}`** returns **`evidence_items.id`** and rewrites **`file://`** **`greenfield_url`** values to **`{backend_public_url}/api/v1/evidence-files/{id}`**.
+
 ### Changed
+
+- **Frontend (`/tasks/[id]`):** Evidence preview treats **HEIC/HEIF** as download-first (no broken `<img>`); link label **Download / open** when applicable ([`TaskDetailActions`](frontend/components/TaskDetailActions.tsx)).
 
 - **Frontend (`/my-tasks`):** **[`MyTasksTable`](frontend/components/tasks/MyTasksTable.tsx)** adds a **Review** filter tab (**`awaiting_requester_review`**) with badge count, between **In progress** and **Completed** (Market-aligned).
 
 - **Frontend (landing `/`):** **[`LandingClient`](frontend/app/LandingClient.tsx)** receives the **full** published task list from **[`page.tsx`](frontend/app/page.tsx)** (no **`slice(0, 12)`** cap). Sidebar **Category** rails use keys that match **`tasks.category`** from the API (**`physical_presence`**, **`knowledge_access`**, **`human_authority`**, **`simple_action`**, **`digital_physical`**, **`agent_to_agent`**, **`verification`**, **`data_collection`**, **`creative`**) so counts and filters align with **`GET /api/v1/tasks?status=published`**; **`catInfo`** falls back to **`formatCategoryLabel`** for unknown categories.
 
-- **API / task detail:** **`GET /api/v1/tasks/{task_id}`** attaches **`evidence_items`** from the latest **`evidence`** submission (**`greenfield_url`**, **`filename`**, **`content_type`**, optional EXIF). **[`TaskDetailActions`](frontend/components/TaskDetailActions.tsx)** renders **Submitted evidence** (image preview, **Open PDF**, or **Open file**) above the approval banner so the publisher can review before **Approve evidence**.
+- **API / task detail:** **`GET /api/v1/tasks/{task_id}`** attaches **`evidence_items`** (includes **`id`**) from the latest **`evidence`** submission; **`file://`** placeholder **`greenfield_url`** values are rewritten to **`GET /api/v1/evidence-files/{id}`**. **[`TaskDetailActions`](frontend/components/TaskDetailActions.tsx)** renders **Submitted evidence** (image preview, **Open PDF**, or **Open file**) above the approval banner so the publisher can review before **Approve evidence**.
 
 - **Frontend (auth routing):** All **`(app)`** routes (dashboard, tasks, wallet, verification, etc.) are wrapped with **[`RequireAuth`](frontend/components/auth/RequireAuth.tsx)** in **[`(app)/layout.tsx`](frontend/app/(app)/layout.tsx)** — users must **Privy sign-in** (`authenticated`) before **`AppShell`** renders; **`/`** landing (and **`/skill.md`** rewrite) stay public without a wallet. The gate uses **landing-aligned** chrome: **[`LandingLogoLink`](frontend/components/brand/LandingLogoLink.tsx)** + **[`ThemeToggle`](frontend/components/shell/ThemeToggle.tsx)**, **`html[data-theme]`** **`--ed-*`** tokens, serif headline and inverted ink **Connect wallet** / outline **Back to home** pills ( **[`.landing-gate-btn`](frontend/app/globals.css)** hover).
 
@@ -46,7 +52,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- **Frontend (Privy):** [`providers.tsx`](frontend/app/providers.tsx) passes a **`useMemo`**-stable **`privyProviderConfig`** into **`PrivyProvider`** instead of a new object every render, and wraps **`SyncOpBNBChain`** + app **`children`** in a single **`display: contents`** (`className="contents"`) node under **`WagmiProvider`** so **`@privy-io/wagmi`** receives one React child (avoids “unique key” dev warnings from sibling lists in some React 19 + Privy setups).
+- **Frontend (Privy):** Bumped **`@privy-io/react-auth`** to **3.22.1** and added **`@solana/wallet-adapter-react`** + **`@farcaster/miniapp-sdk`** so Next/webpack can resolve Privy’s optional **`@farcaster/mini-app-solana`** imports (otherwise **`next build`** fails). [`providers.tsx`](frontend/app/providers.tsx) still passes a **`useMemo`**-stable **`privyProviderConfig`** and wraps **`SyncOpBNBChain`** + app **`children`** in one **`display: contents`** node under **`WagmiProvider`** (mitigates React 19 “unique key” dev warnings from older Privy/wagmi trees).
 
 - **Frontend (`/register`):** World ID **`POST /api/v1/world-id/verify`** errors (e.g. **409** nullifier already linked to another wallet) are **caught** in [`RegisterFlow`](frontend/app/(app)/register/RegisterFlow.tsx) with a clear inline message instead of an uncaught runtime error; duplicate **`handleVerify`** invocations from IDKit are ignored via an **in-flight** guard.
 

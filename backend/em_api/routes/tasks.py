@@ -1074,21 +1074,29 @@ def get_task(task_id: str) -> dict:
             items_r = (
                 supa.table("evidence_items")
                 .select(
-                    "item_index,filename,content_type,greenfield_url,exif_gps_lat,exif_gps_lng,exif_timestamp"
+                    "id,item_index,filename,content_type,greenfield_url,exif_gps_lat,exif_gps_lng,exif_timestamp"
                 )
                 .eq("evidence_id", str(ev_pk))
                 .order("item_index")
                 .execute()
             )
+            base_public = str(settings.backend_public_url).rstrip("/")
             for it in items_r.data or []:
                 url = it.get("greenfield_url")
                 if not url:
                     continue
+                item_id_str = str(it.get("id") or "")
+                url_str = str(url)
+                if url_str.startswith("file://") and item_id_str:
+                    display_url = f"{base_public}/api/v1/evidence-files/{item_id_str}"
+                else:
+                    display_url = url_str
                 item: dict[str, Any] = {
+                    "id": item_id_str,
                     "item_index": it.get("item_index", 0),
                     "filename": it.get("filename") or "evidence",
                     "content_type": it.get("content_type") or "application/octet-stream",
-                    "greenfield_url": str(url),
+                    "greenfield_url": display_url,
                 }
                 if it.get("exif_gps_lat") is not None:
                     item["exif_gps_lat"] = it["exif_gps_lat"]
