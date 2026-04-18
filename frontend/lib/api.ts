@@ -42,6 +42,9 @@ export type TaskCreateBody = {
   deadline_at: string;
   evidence_schema?: Record<string, unknown>;
   executor_requirements?: Record<string, unknown>;
+  location_lat?: number;
+  location_lng?: number;
+  location_radius_m?: number;
 };
 
 export type CreateTaskResponse = {
@@ -180,6 +183,70 @@ export async function fetchWalletActivity(
     throw new Error(parseFastApiDetail(text) || `${r.status} ${r.statusText}`);
   }
   return JSON.parse(text) as { wallet: string; items: WalletActivityItem[] };
+}
+
+export type ChatMessage = { role: "user" | "assistant"; content: string };
+
+/** Validated task draft from LLM (matches server `validate_task_draft_dict` output shape). */
+export type TaskDraftFromApi = {
+  title: string;
+  instructions: string;
+  category: string;
+  bounty_micros: number;
+  deadline_at: string;
+  evidence_schema?: Record<string, unknown>;
+  executor_requirements?: Record<string, unknown>;
+  location_lat?: number;
+  location_lng?: number;
+  location_radius_m?: number;
+};
+
+export type DraftChatResponse = {
+  assistant_message: string;
+  needs_clarification: boolean;
+  draft: TaskDraftFromApi | null;
+};
+
+export type PendingAction = {
+  type: string;
+  task_id?: string;
+  reason?: string;
+};
+
+export type AssistantChatResponse = {
+  assistant_message: string;
+  needs_clarification?: boolean;
+  draft: TaskDraftFromApi | null;
+  pending_actions?: PendingAction[];
+};
+
+export async function postDraftChat(messages: ChatMessage[]): Promise<DraftChatResponse> {
+  const r = await fetch(`${getApiBase()}/api/v1/tasks/draft-chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages }),
+  });
+  const text = await r.text();
+  if (!r.ok) {
+    throw new Error(parseFastApiDetail(text) || `${r.status} ${r.statusText}`);
+  }
+  return JSON.parse(text) as DraftChatResponse;
+}
+
+export async function postAssistantChat(
+  messages: ChatMessage[],
+  requester_wallet: string,
+): Promise<AssistantChatResponse> {
+  const r = await fetch(`${getApiBase()}/api/v1/tasks/assistant-chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages, requester_wallet }),
+  });
+  const text = await r.text();
+  if (!r.ok) {
+    throw new Error(parseFastApiDetail(text) || `${r.status} ${r.statusText}`);
+  }
+  return JSON.parse(text) as AssistantChatResponse;
 }
 
 export async function fetchWalletEscrowLocked(wallet: string): Promise<{

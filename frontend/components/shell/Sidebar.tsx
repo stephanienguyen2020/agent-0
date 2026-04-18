@@ -10,6 +10,7 @@ import { useOptionalAppChrome } from "@/components/shell/app-chrome-context";
 
 import {
   IconAgents,
+  IconChat,
   IconDashboard,
   IconLeaderboard,
   IconLink,
@@ -77,6 +78,8 @@ export function Sidebar({ marketCount }: { marketCount?: number }) {
 
   const activePrefix = (prefix: string) =>
     pathname === prefix || pathname.startsWith(`${prefix}/`);
+
+  const marketActive = pathname === "/tasks" || /^\/tasks\/tk_/.test(pathname);
 
   useEffect(() => {
     chrome?.setMobileNavOpen(false);
@@ -149,16 +152,20 @@ export function Sidebar({ marketCount }: { marketCount?: number }) {
           <IconDashboard className="h-4 w-4 shrink-0 opacity-90" />
           <span className="sidebar-nav-text">Dashboard</span>
         </SidebarNavLink>
-        <SidebarNavLink
-          href="/tasks"
-          active={pathname === "/tasks" || pathname.startsWith("/tasks/")}
-          title="Market"
-        >
+        <SidebarNavLink href="/tasks" active={marketActive} title="Market">
           <IconMarket className="h-4 w-4 shrink-0 opacity-90" />
           <span className="sidebar-nav-text">Market</span>
           {marketCount != null && marketCount > 0 ? (
             <span className="ed-nav-badge">{marketCount > 99 ? "99+" : marketCount}</span>
           ) : null}
+        </SidebarNavLink>
+        <SidebarNavLink
+          href="/tasks/chat"
+          active={pathname === "/tasks/chat" || pathname.startsWith("/tasks/chat/")}
+          title="Create with AI"
+        >
+          <IconChat className="h-4 w-4 shrink-0 opacity-90" />
+          <span className="sidebar-nav-text">Create with AI</span>
         </SidebarNavLink>
         <SidebarNavLink href="/my-tasks" active={activePrefix("/my-tasks")} title="My tasks">
           <IconTasks className="h-4 w-4 shrink-0 opacity-90" />
