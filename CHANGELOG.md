@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Railway workers:** [`agents/pyproject.toml`](agents/pyproject.toml) was missing from the repo, so **`pip install -e './agents[realtime]'`** failed during Nixpacks install with **`neither 'setup.py' nor 'pyproject.toml' found`** under **`/app/agents`**. Restored the **`execution-market-agents`** manifest (deps + **`[realtime]`** extra aligned with **`execution_market_agents.egg-info`**).
+
 - **Railway / Nixpacks:** [backend/nixpacks.toml](backend/nixpacks.toml) — removed custom **`[phases.install]`** that ran **`pip`** before the Nixpacks venv existed (**`pip: command not found`** / exit **127**). Keep **`[start]`** only; default Python install phase creates **`/opt/venv`** then **`pip install .`**. [nixpacks.toml](nixpacks.toml) (workers) — **`[phases.setup]`** adds **`python311Full`** + **`gcc`** so **`python3`** exists at repo root (no **`pyproject.toml`**); **`[phases.install]`** creates **`/opt/venv`** then **`pip install -e ./backend`** / **`agents[realtime]`**; [scripts/railway-worker-start.sh](scripts/railway-worker-start.sh) prefers **`/opt/venv/bin/python`** when present.
 
 - **Railway / Nixpacks:** backend deploy no longer runs **`python -m em-backend`** (nonexistent module derived from the old **`[project] name`**); use **`Procfile`**, **`python -m em_api`**, and **`name = "em_api"`** ([backend/Procfile](backend/Procfile), [backend/em_api/__main__.py](backend/em_api/__main__.py)).
