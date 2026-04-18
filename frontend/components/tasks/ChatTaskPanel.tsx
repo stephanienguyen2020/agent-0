@@ -372,8 +372,8 @@ export function ChatTaskPanel() {
           style={{ background: "var(--bg-2)" }}
         >
           {messages.length === 0 ? (
-            <div className="flex min-h-0 flex-1 flex-col justify-center">
-              <p className="text-sm [text-wrap:pretty]" style={{ color: "var(--mute)" }}>
+            <div className="flex min-h-0 flex-1 flex-col justify-center px-2 sm:px-4">
+              <p className="text-center text-sm [text-wrap:pretty]" style={{ color: "var(--mute)" }}>
                 Describe the task you want on the market — bounty in USDC, deadline, and what executors should do.
                 {!authenticated ? " You can draft without a wallet; connect to publish." : null}
               </p>
