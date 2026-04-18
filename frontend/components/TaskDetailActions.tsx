@@ -168,6 +168,7 @@ function TaskDetailActionsInner({ task }: { task: TaskRow }) {
 }
 
 export function TaskDetailActions({ task }: { task: TaskRow }) {
+  const configured = usePrivyConfigured();
   const terminal = TERMINAL_STATUSES.has(task.status.toLowerCase());
   if (terminal) {
     return (
@@ -181,7 +182,6 @@ export function TaskDetailActions({ task }: { task: TaskRow }) {
     );
   }
 
-  const configured = usePrivyConfigured();
   if (!configured) {
     return (
       <Card className="mt-8 p-5">
