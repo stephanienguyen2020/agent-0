@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>workflow_demo</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui; background: #0f1419; color: #e6edf3; margin: 0; padding: 1rem 1.25rem; }
+    h1 { font-size: 1rem; font-weight: 600; margin: 0 0 0.75rem; color: #8ddbff; }
+    pre { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 0.75rem; overflow: auto; font-size: 12px; line-height: 1.45; max-height: 70vh; }
+    .err { color: #ff7b72; margin-top: 0.5rem; }
+    .hint { color: #8b949e; font-size: 12px; margin-bottom: 0.75rem; }
+  </style>
+</head>
+<body>
+  <h1>Execution Market — workflow_demo</h1>
+  <p class="hint">Polling <code>/state</code> on this origin (same host/port as the mirror). Run the CLI with <code>--http-ui</code>.</p>
+  <pre id="out">Loading…</pre>
+  <div id="err" class="err"></div>
+  <script>
+    const out = document.getElementById("out");
+    const errEl = document.getElementById("err");
+    async function poll() {
+      try {
+        const r = await fetch("/state", { cache: "no-store" });
+        const j = await r.json();
+        out.textContent = JSON.stringify(j, null, 2);
+        errEl.textContent = j.error || "";
+      } catch (e) {
+        out.textContent = String(e);
+      }
+    }
+    poll();
+    setInterval(poll, 500);
+  </script>
+</body>
+</html>

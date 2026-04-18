@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Railway workers:** restored tracked **`agents/emagents/**`** Python sources (merged from **`dev`** / branch history) — deployment branches that omitted this tree caused **`ModuleNotFoundError: No module named 'emagents'`** at runtime after **`pip install -e ./agents`**. [docs/railway-deploy.md](docs/railway-deploy.md) §4.3 / §9 clarify per-service **`WORKER_MODULE`** (reputation ≠ **`verifier_worker`**).
+
 - **Railway workers:** [`agents/pyproject.toml`](agents/pyproject.toml) was missing from the repo, so **`pip install -e './agents[realtime]'`** failed during Nixpacks install with **`neither 'setup.py' nor 'pyproject.toml' found`** under **`/app/agents`**. Restored the **`execution-market-agents`** manifest (deps + **`[realtime]`** extra aligned with **`execution_market_agents.egg-info`**).
 
 - **Railway / Nixpacks:** [backend/nixpacks.toml](backend/nixpacks.toml) — removed custom **`[phases.install]`** that ran **`pip`** before the Nixpacks venv existed (**`pip: command not found`** / exit **127**). Keep **`[start]`** only; default Python install phase creates **`/opt/venv`** then **`pip install .`**. [nixpacks.toml](nixpacks.toml) (workers) — **`[phases.setup]`** adds **`python311Full`** + **`gcc`** so **`python3`** exists at repo root (no **`pyproject.toml`**); **`[phases.install]`** creates **`/opt/venv`** then **`pip install -e ./backend`** / **`agents[realtime]`**; [scripts/railway-worker-start.sh](scripts/railway-worker-start.sh) prefers **`/opt/venv/bin/python`** when present.
