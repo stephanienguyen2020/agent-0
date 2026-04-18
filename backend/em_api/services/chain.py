@@ -250,6 +250,17 @@ class ChainService:
         except Exception:
             return False
 
+    def wait_for_transaction(self, tx_hash_hex: str | None, *, timeout: int = 180) -> Any:
+        """Block until the transaction is mined and success (status 1). Required before a follow-up tx that depends on it."""
+        if not tx_hash_hex or not self._w3:
+            return None
+        h = tx_hash_hex if str(tx_hash_hex).startswith("0x") else f"0x{tx_hash_hex}"
+        receipt = self._w3.eth.wait_for_transaction_receipt(h, timeout=timeout)
+        status = receipt.get("status")
+        if status != 1:
+            raise RuntimeError(f"transaction reverted on-chain (status={status}): {h}")
+        return receipt
+
     def escrow_fee_bps(self) -> int | None:
         """Deployed escrow fee numerator (basis points); source of truth for EIP-3009 totals."""
         if not self._escrow:

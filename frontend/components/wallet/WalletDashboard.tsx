@@ -5,6 +5,8 @@ import { useAccount, useBalance, useReadContract, useWaitForTransactionReceipt, 
 
 import { usePrivyConfigured } from "@/app/providers";
 import { Card } from "@/components/ui/Card";
+import { fetchWalletActivity, fetchWalletEscrowLocked, type WalletActivityItem } from "@/lib/api";
+import { explorerTxUrl, shortTxHash } from "@/lib/explorer";
 import { getFaucetMintAmount, mockUsdcAbi } from "@/lib/mock-usdc-abi";
 import { getMockUsdcAddressEnv } from "@/lib/x402-eip3009";
 
@@ -19,6 +21,47 @@ function fmtUsdcMicros(micros: bigint | undefined) {
   if (micros == null) return "—";
   const v = Number(micros) / 1_000_000;
   return v.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+function fmtMicrosDecimalString(s: string): string {
+  try {
+    return fmtUsdcMicros(BigInt(s));
+  } catch {
+    return "—";
+  }
+}
+
+type ActivityFilter = "all" | "earned" | "spent" | "escrow";
+
+const ACTIVITY_FILTERS: { key: ActivityFilter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "earned", label: "Earned" },
+  { key: "spent", label: "Spent" },
+  { key: "escrow", label: "Escrow" },
+];
+
+function kindLabel(kind: string): string {
+  const m: Record<string, string> = {
+    publish: "Publish task",
+    x402_settle: "x402 settle",
+    accept: "Accept",
+    submit: "Submit",
+    verify: "Verify",
+    release: "Release / payout",
+    refund: "Refund",
+  };
+  return m[kind] ?? kind;
+}
+
+function fmtActivityWhen(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "—";
+    return d.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+  } catch {
+    return "—";
+  }
 }
 
 export function WalletDashboard() {
@@ -48,6 +91,16 @@ export function WalletDashboard() {
   const [mintTxHash, setMintTxHash] = useState<`0x${string}` | undefined>();
   const [mintErr, setMintErr] = useState<string | null>(null);
 
+  const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
+  const [activityItems, setActivityItems] = useState<WalletActivityItem[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [activityError, setActivityError] = useState<string | null>(null);
+
+  const [escrowLockedMicros, setEscrowLockedMicros] = useState<string | null>(null);
+  const [escrowTaskCount, setEscrowTaskCount] = useState(0);
+  const [escrowLoading, setEscrowLoading] = useState(false);
+  const [escrowError, setEscrowError] = useState<string | null>(null);
+
   const { isLoading: isConfirming, isSuccess: mintConfirmed } = useWaitForTransactionReceipt({
     hash: mintTxHash,
   });
@@ -58,6 +111,63 @@ export function WalletDashboard() {
     setMintTxHash(undefined);
     setMintErr(null);
   }, [mintConfirmed, mintTxHash, refetchUsdc]);
+
+  useEffect(() => {
+    if (!address) {
+      setActivityItems([]);
+      setActivityError(null);
+      return;
+    }
+    let cancelled = false;
+    setActivityLoading(true);
+    setActivityError(null);
+    void fetchWalletActivity(address, { limit: 50 })
+      .then((res) => {
+        if (!cancelled) setActivityItems(res.items);
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setActivityError(e instanceof Error ? e.message : "Failed to load activity");
+      })
+      .finally(() => {
+        if (!cancelled) setActivityLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [address]);
+
+  useEffect(() => {
+    if (!address) {
+      setEscrowLockedMicros(null);
+      setEscrowTaskCount(0);
+      setEscrowError(null);
+      return;
+    }
+    let cancelled = false;
+    setEscrowLoading(true);
+    setEscrowError(null);
+    void fetchWalletEscrowLocked(address)
+      .then((res) => {
+        if (!cancelled) {
+          setEscrowLockedMicros(res.locked_micros);
+          setEscrowTaskCount(res.task_count);
+        }
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setEscrowError(e instanceof Error ? e.message : "Failed to load escrow total");
+      })
+      .finally(() => {
+        if (!cancelled) setEscrowLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [address]);
+
+  const filteredActivity = useMemo(() => {
+    if (activityFilter === "all") return activityItems;
+    return activityItems.filter((it) => it.bucket === activityFilter);
+  }, [activityItems, activityFilter]);
 
   const onMint = useCallback(async () => {
     if (!mockUsdc || !address) return;
@@ -115,12 +225,27 @@ export function WalletDashboard() {
           </div>
           <div className="mb-1.5 text-xs font-medium text-az-muted-2">Locked in Escrow</div>
           <div className="text-4xl font-extrabold tracking-tight text-az-text [font-variant-numeric:tabular-nums]">
-            —
+            {escrowLoading ? (
+              "…"
+            ) : escrowError ? (
+              "—"
+            ) : (
+              `${fmtMicrosDecimalString(escrowLockedMicros ?? "0")} USDC`
+            )}
           </div>
-          <div className="mt-1 text-sm text-az-muted-2">From indexer / contract (soon)</div>
-          <span className="mt-2 inline-flex rounded-full bg-[rgba(91,156,245,0.12)] px-2 py-0.5 text-[11px] font-semibold text-az-blue">
-            Placeholder
-          </span>
+          <div className="mt-1 text-sm text-az-muted-2">
+            {!escrowLoading && !escrowError
+              ? `Requester totals · ${escrowTaskCount} task${escrowTaskCount === 1 ? "" : "s"} · DB snapshot`
+              : "Tasks you publish as requester (bounty + fee)"}
+          </div>
+          {escrowError ? (
+            <p className="mt-2 text-[11px] text-amber-300/90 [text-wrap:pretty]">{escrowError}</p>
+          ) : null}
+          {!escrowLoading && !escrowError ? (
+            <span className="mt-2 inline-flex rounded-full bg-[rgba(91,156,245,0.12)] px-2 py-0.5 text-[11px] font-semibold text-az-blue">
+              Live
+            </span>
+          ) : null}
         </Card>
 
         <Card className="relative overflow-hidden p-6 az-animate-fade-up" style={{ animationDelay: "0.1s" }}>
@@ -199,21 +324,75 @@ export function WalletDashboard() {
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-az-stroke px-5 py-4">
           <h3 className="text-base font-bold text-az-text">Transaction History</h3>
           <div className="flex gap-0.5 rounded-full border border-az-stroke bg-white/[0.04] p-1">
-            {["All", "Earned", "Spent", "Escrow"].map((x, i) => (
+            {ACTIVITY_FILTERS.map(({ key, label }) => (
               <button
-                key={x}
+                key={key}
                 type="button"
+                onClick={() => setActivityFilter(key)}
                 className={`rounded-full px-3 py-1.5 text-[11px] font-semibold ${
-                  i === 0 ? "bg-white/[0.08] text-white" : "text-az-muted-2 hover:text-az-text"
+                  activityFilter === key ? "bg-white/[0.08] text-white" : "text-az-muted-2 hover:text-az-text"
                 }`}
               >
-                {x}
+                {label}
               </button>
             ))}
           </div>
         </div>
-        <div className="px-5 pb-5 pt-2 text-sm text-az-muted-2">
-          Connect an indexer or subgraph to list transfers. Placeholder rows match the AgentZero mockup flow (x402, escrow).
+        <div className="px-5 pb-5 pt-3">
+          {activityLoading ? (
+            <p className="text-sm text-az-muted-2">Loading activity…</p>
+          ) : activityError ? (
+            <p className="text-sm text-amber-300/90 [text-wrap:pretty]">{activityError}</p>
+          ) : filteredActivity.length === 0 ? (
+            <p className="text-sm text-az-muted-2 [text-wrap:pretty]">
+              {activityItems.length === 0
+                ? "No on-chain task activity yet. Publish or accept tasks to see escrow and settlement txs here."
+                : "Nothing in this filter. Try All or another tab."}
+            </p>
+          ) : (
+            <div className="max-h-[min(420px,50vh)] overflow-auto rounded-xl border border-az-stroke bg-white/[0.02]">
+              <table className="w-full border-collapse text-left text-[13px]">
+                <thead className="sticky top-0 z-[1] border-b border-az-stroke bg-[rgba(14,22,18,0.95)] backdrop-blur-sm">
+                  <tr className="text-[11px] font-semibold uppercase tracking-wide text-az-muted-2">
+                    <th className="px-3 py-2.5 font-semibold">Type</th>
+                    <th className="px-3 py-2.5 font-semibold">Task</th>
+                    <th className="hidden sm:table-cell px-3 py-2.5 font-semibold">When</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Tx</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredActivity.map((row) => (
+                    <tr key={row.id} className="border-b border-az-stroke/80 last:border-0">
+                      <td className="px-3 py-2.5 align-top text-az-text">
+                        <span className="font-medium">{kindLabel(row.kind)}</span>
+                        <span className="mt-0.5 block text-[11px] capitalize text-az-muted-2">
+                          {row.role} · {row.bucket}
+                        </span>
+                      </td>
+                      <td className="max-w-[200px] px-3 py-2.5 align-top text-az-muted">
+                        <span className="line-clamp-2" title={row.title}>
+                          {row.title || row.task_id}
+                        </span>
+                      </td>
+                      <td className="hidden sm:table-cell whitespace-nowrap px-3 py-2.5 align-top text-az-muted-2">
+                        {fmtActivityWhen(row.occurred_at)}
+                      </td>
+                      <td className="px-3 py-2.5 text-right align-top">
+                        <a
+                          href={explorerTxUrl(row.tx_hash)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="az-mono text-[12px] font-medium text-[#cdf56a] underline-offset-2 hover:underline"
+                        >
+                          {shortTxHash(row.tx_hash)}
+                        </a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </Card>
     </>

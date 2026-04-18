@@ -5,6 +5,7 @@ description = "Execution Market FastAPI backend"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+  "certifi>=2024.8.30",
   "fastapi>=0.115.0",
   "uvicorn[standard]>=0.32.0",
   "pydantic-settings>=2.6.0",

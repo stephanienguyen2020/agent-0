@@ -1,5 +1,6 @@
 import { getApiBase } from "@/lib/api-base";
 import { ESCROW_FEE_BPS } from "@/lib/constants";
+import type { TaskApiRecord } from "@/lib/task-types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -77,8 +78,82 @@ export async function fetchTasks() {
   return r.json() as Promise<{ tasks: unknown[] }>;
 }
 
-export async function fetchTask(id: string) {
+export async function fetchTask(id: string): Promise<TaskApiRecord> {
   const r = await fetch(`${API_BASE}/api/v1/tasks/${id}`, { cache: "no-store" });
   if (!r.ok) throw new Error("task not found");
-  return r.json();
+  return r.json() as Promise<TaskApiRecord>;
+}
+
+export type LeaderboardExecutor = {
+  rank: number;
+  executor_id: string;
+  display_name: string;
+  type: string;
+  wallet: string | null;
+  score: number;
+  rating_bps: number;
+  tasks_completed: number;
+  tasks_disputed: number;
+  dispute_losses: number;
+  total_earned_micros: string;
+};
+
+export async function fetchLeaderboard(opts?: {
+  type?: "all" | "human" | "agent" | "robot";
+  limit?: number;
+}): Promise<{ executors: LeaderboardExecutor[] }> {
+  const params = new URLSearchParams();
+  const t = opts?.type;
+  if (t && t !== "all") params.set("type", t);
+  if (opts?.limit != null) params.set("limit", String(opts.limit));
+  const qs = params.toString();
+  const url = `${getApiBase()}/api/v1/leaderboard${qs ? `?${qs}` : ""}`;
+  const r = await fetch(url, { cache: "no-store" });
+  const text = await r.text();
+  if (!r.ok) {
+    throw new Error(parseFastApiDetail(text) || `${r.status} ${r.statusText}`);
+  }
+  return JSON.parse(text) as { executors: LeaderboardExecutor[] };
+}
+
+export type WalletActivityItem = {
+  id: string;
+  task_id: string;
+  title: string;
+  status?: string;
+  role: string;
+  kind: string;
+  bucket: "spent" | "earned" | "escrow";
+  tx_hash: string;
+  occurred_at: string | null;
+};
+
+export async function fetchWalletActivity(
+  wallet: string,
+  opts?: { limit?: number },
+): Promise<{ wallet: string; items: WalletActivityItem[] }> {
+  const params = new URLSearchParams();
+  params.set("wallet", wallet);
+  if (opts?.limit != null) params.set("limit", String(opts.limit));
+  const r = await fetch(`${getApiBase()}/api/v1/wallet/activity?${params}`, { cache: "no-store" });
+  const text = await r.text();
+  if (!r.ok) {
+    throw new Error(parseFastApiDetail(text) || `${r.status} ${r.statusText}`);
+  }
+  return JSON.parse(text) as { wallet: string; items: WalletActivityItem[] };
+}
+
+export async function fetchWalletEscrowLocked(wallet: string): Promise<{
+  wallet: string;
+  locked_micros: string;
+  task_count: number;
+}> {
+  const params = new URLSearchParams();
+  params.set("wallet", wallet);
+  const r = await fetch(`${getApiBase()}/api/v1/wallet/escrow-locked?${params}`, { cache: "no-store" });
+  const text = await r.text();
+  if (!r.ok) {
+    throw new Error(parseFastApiDetail(text) || `${r.status} ${r.statusText}`);
+  }
+  return JSON.parse(text) as { wallet: string; locked_micros: string; task_count: number };
 }

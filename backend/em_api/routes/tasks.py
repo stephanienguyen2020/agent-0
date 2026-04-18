@@ -12,13 +12,13 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
 from em_api.config import settings
-from em_api.constants import ESCROW_FEE_BPS
+from em_api.constants import ESCROW_FEE_BPS, REP_COMPLETION_DELTA_SCORE
 from em_api.deps import get_chain, get_supabase
 from em_api.services.evidence_schemas import validate_evidence
 from em_api.services.greenfield import (
@@ -258,6 +258,8 @@ def create_task(request: Request, body: TaskCreate, chain=Depends(get_chain)) ->
         "on_chain_tx_publish": tx_hash,
         "on_chain_task_id": task_id,
     }
+    if x402_settle_tx:
+        row["on_chain_tx_x402_settle"] = x402_settle_tx
     supa.table("tasks").insert(row).execute()
     resp: dict = {"task_id": task_id, "on_chain_tx_publish": tx_hash}
     if x402_settle_tx:
@@ -318,11 +320,14 @@ def accept_task(task_id: str, body: TaskAcceptBody, chain=Depends(get_chain)) ->
 @router.post("/{task_id}/submit")
 async def submit_task(
     task_id: str,
-    evidence: str | None = None,
+    evidence: str | None = Form(None),
     file: UploadFile | None = File(None),
+    gps_lat: float | None = Form(None),
+    gps_lng: float | None = Form(None),
+    taken_at: str | None = Form(None),
     chain=Depends(get_chain),
 ) -> dict:
-    """Submit JSON evidence as form field `evidence` or upload a file."""
+    """Submit JSON evidence as form field `evidence` or upload a file (multipart). Optional GPS/timestamp for file uploads."""
     supa = get_supabase()
     if not supa:
         raise HTTPException(503, "Supabase not configured")
@@ -363,7 +368,9 @@ async def submit_task(
             url, _ = local_placeholder_upload(task_id, fn, data)
             stored_bucket = "local"
 
-        ev_payload = {"photo_urls": [url], "gps_lat": None, "gps_lng": None}
+        ev_payload: dict[str, Any] = {"photo_urls": [url], "gps_lat": gps_lat, "gps_lng": gps_lng}
+        if taken_at:
+            ev_payload["taken_at"] = taken_at
     else:
         if not evidence:
             raise HTTPException(422, "evidence JSON or file required")
@@ -404,17 +411,22 @@ async def submit_task(
 
     if file is not None:
         ct = file.content_type or mimetypes.guess_type(fn)[0] or "application/octet-stream"
-        supa.table("evidence_items").insert(
-            {
-                "evidence_id": evidence_id,
-                "item_index": 0,
-                "filename": fn,
-                "content_type": ct,
-                "size_bytes": len(data),
-                "sha256": sha_hex[2:] if sha_hex.startswith("0x") else sha_hex,
-                "greenfield_url": ev_payload.get("photo_urls", [url])[0],
-            }
-        ).execute()
+        item_ins: dict[str, Any] = {
+            "evidence_id": evidence_id,
+            "item_index": 0,
+            "filename": fn,
+            "content_type": ct,
+            "size_bytes": len(data),
+            "sha256": sha_hex[2:] if sha_hex.startswith("0x") else sha_hex,
+            "greenfield_url": ev_payload.get("photo_urls", [url])[0],
+        }
+        if gps_lat is not None:
+            item_ins["exif_gps_lat"] = gps_lat
+        if gps_lng is not None:
+            item_ins["exif_gps_lng"] = gps_lng
+        if taken_at:
+            item_ins["exif_timestamp"] = taken_at
+        supa.table("evidence_items").insert(item_ins).execute()
     else:
         photo_urls = ev_payload.get("photo_urls") or []
         doc_url = ev_payload.get("document_url")
@@ -446,7 +458,14 @@ def _evidence_dict_from_items(category: str, items: list[dict]) -> dict[str, Any
     urls = [str(it.get("greenfield_url", "")) for it in ordered if it.get("greenfield_url")]
     if category == "knowledge_access":
         return {"document_url": urls[0] if urls else None}
-    return {"photo_urls": urls, "gps_lat": None, "gps_lng": None}
+    first = ordered[0] if ordered else {}
+    lat = first.get("exif_gps_lat")
+    lng = first.get("exif_gps_lng")
+    ts = first.get("exif_timestamp")
+    out: dict[str, Any] = {"photo_urls": urls, "gps_lat": lat, "gps_lng": lng}
+    if ts is not None:
+        out["taken_at"] = ts if isinstance(ts, str) else str(ts)
+    return out
 
 
 @router.post("/{task_id}/verify")
@@ -493,6 +512,7 @@ def verify_task(task_id: str, chain=Depends(get_chain)) -> dict:
         raise HTTPException(422, f"verification failed: {pipeline.reason}")
 
     txv = chain.mark_verified(task_id)
+    chain.wait_for_transaction(txv)
     txr = chain.release(task_id)
     now = datetime.now(timezone.utc).isoformat()
     supa.table("tasks").update(
@@ -500,6 +520,7 @@ def verify_task(task_id: str, chain=Depends(get_chain)) -> dict:
             "status": "completed",
             "verified_at": now,
             "settled_at": now,
+            "on_chain_tx_verify": txv,
             "on_chain_tx_release": txr,
         }
     ).eq("task_id", task_id).execute()
@@ -520,6 +541,29 @@ def verify_task(task_id: str, chain=Depends(get_chain)) -> dict:
             "raw": pipeline.details,
         }
     ).execute()
+    executor_id = task.get("executor_id")
+    if executor_id:
+        ex_r = (
+            supa.table("executors")
+            .select("erc8004_agent_id")
+            .eq("id", executor_id)
+            .single()
+            .execute()
+        )
+        if ex_r.data:
+            bounty_micros = int(task.get("bounty_micros") or 0)
+            supa.table("reputation_events").insert(
+                {
+                    "executor_id": executor_id,
+                    "erc8004_agent_id": ex_r.data["erc8004_agent_id"],
+                    "event_type": "completion",
+                    "delta_score": REP_COMPLETION_DELTA_SCORE,
+                    "source_task_id": task_id,
+                    "source_category": category,
+                    "earned_micros": bounty_micros,
+                    "on_chain_tx": txr or "",
+                }
+            ).execute()
     return {"task_id": task_id, "on_chain_tx_verify": txv, "on_chain_tx_release": txr}
 
 

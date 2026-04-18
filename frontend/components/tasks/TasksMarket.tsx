@@ -15,6 +15,9 @@ export type TaskRow = {
   status: string;
   bounty_micros?: string | number;
   instructions?: string;
+  updated_at?: string | null;
+  on_chain_tx_release?: string | null;
+  on_chain_tx_publish?: string | null;
 };
 
 function formatBounty(micros: string | number | undefined) {
@@ -96,9 +99,9 @@ export function TasksMarket({ tasks }: { tasks: TaskRow[] }) {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {filtered.map((t, i) => (
-          <Link key={t.task_id} href={`/tasks/${t.task_id}`} className="block">
+          <Link key={t.task_id} href={`/tasks/${t.task_id}`} className="block h-full">
             <Card
-              className={`relative cursor-pointer overflow-hidden p-5 transition hover:-translate-y-0.5 hover:border-white/[0.14] hover:shadow-[0_24px_50px_-20px_rgba(0,0,0,0.6)] az-animate-fade-up`}
+              className={`relative flex h-full cursor-pointer flex-col overflow-hidden p-5 transition hover:-translate-y-0.5 hover:border-white/[0.14] hover:shadow-[0_24px_50px_-20px_rgba(0,0,0,0.6)] az-animate-fade-up`}
               style={{ animationDelay: `${Math.min(i * 0.03, 0.3)}s` }}
             >
               <div className="absolute right-0 top-0 h-[60px] w-[60px] overflow-hidden">
@@ -112,11 +115,21 @@ export function TasksMarket({ tasks }: { tasks: TaskRow[] }) {
               <div className="mb-1 text-lg font-extrabold tabular-nums text-[#cdf56a]">
                 {formatBounty(t.bounty_micros)} <span className="text-[11px] font-medium text-az-muted-2">USDC</span>
               </div>
-              <h3 className="mb-1.5 line-clamp-2 text-sm font-bold leading-snug text-az-text">{t.title}</h3>
-              <p className="mb-3.5 line-clamp-2 text-xs leading-relaxed text-az-muted-2">
-                {t.instructions || "No description."}
-              </p>
-              <div className="mt-3.5 flex items-center justify-between border-t border-az-stroke pt-3.5">
+              <div className="mb-3.5 flex min-h-[5.25rem] flex-1 flex-col gap-1.5">
+                <h3
+                  title={t.title}
+                  className="line-clamp-2 text-sm font-bold leading-snug text-az-text"
+                >
+                  {t.title}
+                </h3>
+                <p
+                  title={t.instructions?.trim() || "No description."}
+                  className="line-clamp-2 text-xs leading-relaxed text-az-muted-2"
+                >
+                  {t.instructions || "No description."}
+                </p>
+              </div>
+              <div className="mt-auto flex items-center justify-between border-t border-az-stroke pt-3.5">
                 <span className="text-[10px] text-az-muted">ID {String(t.task_id).slice(0, 8)}…</span>
                 <span className="text-[11px] font-medium capitalize text-az-muted-2">{t.status.replace(/_/g, " ")}</span>
               </div>

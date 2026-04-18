@@ -1,10 +1,12 @@
 "use client";
 
 import { usePrivy, useWallets } from "@privy-io/react-auth";
-import { useCallback, useState, type FormEvent } from "react";
+import { useCallback, useId, useState, type FormEvent } from "react";
 import { useAccount } from "wagmi";
 
 import { usePrivyConfigured } from "@/app/providers";
+import { BtnPrimary } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import { getApiBase } from "@/lib/api-base";
 
 type TaskRow = {
@@ -13,12 +15,26 @@ type TaskRow = {
   title?: string;
 };
 
+const outlineBtn =
+  "inline-flex h-11 items-center justify-center rounded-[14px] border border-az-stroke-2 bg-white/[0.04] px-5 text-[13px] font-semibold text-az-text transition hover:border-white/[0.15] hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:opacity-45";
+
+const TERMINAL_STATUSES = new Set([
+  "completed",
+  "disputed",
+  "rejected",
+  "expired",
+  "cancelled",
+  "refunded",
+]);
+
 function TaskDetailActionsInner({ task }: { task: TaskRow }) {
   const { authenticated, login } = usePrivy();
   const { address } = useAccount();
   const { wallets } = useWallets();
+  const fileInputId = useId();
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [chosenFileName, setChosenFileName] = useState<string | null>(null);
 
   const wallet =
     (address as string | undefined) ||
@@ -27,21 +43,18 @@ function TaskDetailActionsInner({ task }: { task: TaskRow }) {
 
   const api = getApiBase();
 
-  const run = useCallback(
-    async (fn: () => Promise<void>) => {
-      setMsg(null);
-      setBusy(true);
-      try {
-        await fn();
-        setMsg("OK");
-      } catch (e) {
-        setMsg(e instanceof Error ? e.message : "Request failed");
-      } finally {
-        setBusy(false);
-      }
-    },
-    [],
-  );
+  const run = useCallback(async (fn: () => Promise<void>) => {
+    setMsg(null);
+    setBusy(true);
+    try {
+      await fn();
+      setMsg("OK");
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Request failed");
+    } finally {
+      setBusy(false);
+    }
+  }, []);
 
   const onAccept = () =>
     run(async () => {
@@ -77,6 +90,7 @@ function TaskDetailActionsInner({ task }: { task: TaskRow }) {
         throw new Error(t || r.statusText);
       }
       (ev.target as HTMLFormElement).reset();
+      setChosenFileName(null);
     });
   };
 
@@ -91,73 +105,88 @@ function TaskDetailActionsInner({ task }: { task: TaskRow }) {
 
   if (!authenticated) {
     return (
-      <div className="mt-8 rounded-xl border border-white/10 p-4">
-        <p className="text-sm text-[var(--muted)]">Connect your wallet to accept or submit evidence.</p>
-        <button
-          type="button"
-          onClick={() => login()}
-          className="mt-3 rounded-lg border border-[var(--accent)]/40 bg-[var(--accent)]/10 px-4 py-2 text-sm font-medium text-[var(--accent)]"
-        >
+      <Card className="mt-8 p-5">
+        <p className="text-sm text-az-muted-2">Connect your wallet to accept or submit evidence.</p>
+        <BtnPrimary type="button" className="mt-4" onClick={() => login()}>
           Connect wallet
-        </button>
-      </div>
+        </BtnPrimary>
+      </Card>
     );
   }
 
+  const disabledEvidence = busy || task.status !== "accepted";
+
   return (
-    <div className="mt-8 space-y-6 rounded-xl border border-white/10 p-4">
-      <p className="text-xs text-[var(--muted)]">
-        API: <code className="rounded bg-white/5 px-1">{api}</code>
+    <Card className="mt-8 space-y-5 p-5">
+      <p className="text-xs text-az-muted-2">
+        API:{" "}
+        <code className="rounded-lg border border-az-stroke-2 bg-white/[0.04] px-2 py-0.5 font-mono text-[11px] text-[#cdf56a]">
+          {api}
+        </code>
       </p>
       {msg && (
         <p className={`text-sm ${msg === "OK" ? "text-emerald-400" : "text-amber-300"}`}>{msg}</p>
       )}
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          disabled={busy || task.status !== "published"}
-          onClick={onAccept}
-          className="rounded-lg bg-[var(--accent)]/90 px-4 py-2 text-sm font-medium text-black disabled:opacity-40"
-        >
+      <div className="flex flex-wrap gap-2.5">
+        <BtnPrimary type="button" disabled={busy || task.status !== "published"} onClick={onAccept}>
           Accept task
-        </button>
-        <button
-          type="button"
-          disabled={busy || task.status !== "submitted"}
-          onClick={onVerify}
-          className="rounded-lg border border-white/20 px-4 py-2 text-sm disabled:opacity-40"
-        >
+        </BtnPrimary>
+        <button type="button" disabled={busy || task.status !== "submitted"} onClick={onVerify} className={outlineBtn}>
           Verify &amp; release
         </button>
       </div>
-      <form onSubmit={onSubmit} className="space-y-2">
-        <label className="block text-sm text-[var(--muted)]">Upload evidence (photo / file)</label>
-        <input
-          name="file"
-          type="file"
-          accept="image/*,application/pdf"
-          disabled={busy || task.status !== "accepted"}
-          className="block w-full text-sm"
-        />
-        <button
-          type="submit"
-          disabled={busy || task.status !== "accepted"}
-          className="rounded-lg border border-white/20 px-4 py-2 text-sm disabled:opacity-40"
-        >
+      <form onSubmit={onSubmit} className="space-y-4 border-t border-az-stroke pt-5">
+        <label htmlFor={fileInputId} className="block text-sm font-medium text-az-muted-2">
+          Upload evidence (photo / file)
+        </label>
+        <div className="flex flex-wrap items-center gap-3">
+          <input
+            id={fileInputId}
+            name="file"
+            type="file"
+            accept="image/*,application/pdf"
+            disabled={disabledEvidence}
+            className="sr-only"
+            onChange={(e) => setChosenFileName(e.target.files?.[0]?.name ?? null)}
+          />
+          <label
+            htmlFor={fileInputId}
+            className={`inline-flex h-11 cursor-pointer items-center rounded-[14px] border border-az-stroke-2 bg-white/[0.06] px-4 text-[13px] font-semibold text-az-text transition hover:border-[rgba(182,242,74,0.25)] hover:bg-white/[0.09] ${disabledEvidence ? "pointer-events-none opacity-45" : ""}`}
+          >
+            Choose file
+          </label>
+          <span className="min-w-0 truncate text-xs text-az-muted">
+            {chosenFileName ?? "No file chosen"}
+          </span>
+        </div>
+        <BtnPrimary type="submit" disabled={disabledEvidence}>
           Submit evidence
-        </button>
+        </BtnPrimary>
       </form>
-    </div>
+    </Card>
   );
 }
 
 export function TaskDetailActions({ task }: { task: TaskRow }) {
+  const terminal = TERMINAL_STATUSES.has(task.status.toLowerCase());
+  if (terminal) {
+    return (
+      <Card className="mt-8 p-5">
+        <p className="text-sm text-az-muted-2">
+          No further lifecycle actions — status is{" "}
+          <span className="font-semibold capitalize text-az-text">{task.status.replace(/_/g, " ")}</span>.
+          Use the settlement section above for amounts, timestamps, and opBNBScan transaction links.
+        </p>
+      </Card>
+    );
+  }
+
   const configured = usePrivyConfigured();
   if (!configured) {
     return (
-      <p className="mt-8 text-sm text-[var(--muted)]">
-        Configure Privy to enable accept / submit from the browser.
-      </p>
+      <Card className="mt-8 p-5">
+        <p className="text-sm text-az-muted-2">Configure Privy to enable accept / submit from the browser.</p>
+      </Card>
     );
   }
   return <TaskDetailActionsInner task={task} />;

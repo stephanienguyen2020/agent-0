@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { LifecycleBar, MyTasksTable } from "@/components/tasks/MyTasksTable";
+import { MyTasksTable } from "@/components/tasks/MyTasksTable";
 import type { TaskRow } from "@/components/tasks/TasksMarket";
 import { TopbarSimple } from "@/components/shell/Topbar";
 import { IconPlus } from "@/components/ui/Button";
@@ -36,7 +36,10 @@ export default async function MyTasksPage() {
         </p>
       )}
 
-      <LifecycleBar />
+      <p className="mb-6 max-w-2xl text-sm leading-relaxed text-az-muted-2">
+        Stages: Published → Accepted → In progress → Submitted → Verifying → Completed. Open a task for the
+        full lifecycle bar, settlement amounts, timestamps, and transaction links on opBNBScan.
+      </p>
       <MyTasksTable tasks={tasks} />
     </div>
   );

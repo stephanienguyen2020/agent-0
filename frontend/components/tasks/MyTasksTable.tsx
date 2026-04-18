@@ -6,12 +6,24 @@ import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { CategoryPill, StatusPill } from "@/components/ui/TaskChips";
 import type { TaskRow } from "@/components/tasks/TasksMarket";
+import { explorerTxUrl, shortTxHash } from "@/lib/explorer";
 
 function formatBounty(micros: string | number | undefined) {
   if (micros == null) return "—";
   const n = typeof micros === "string" ? Number(micros) : micros;
   if (Number.isNaN(n)) return String(micros);
   return (n / 1_000_000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatUpdated(iso: string | null | undefined) {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "—";
+    return d.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+  } catch {
+    return "—";
+  }
 }
 
 type TabId = "all" | "published" | "in_progress" | "completed" | "disputed";
@@ -97,32 +109,56 @@ export function MyTasksTable({ tasks }: { tasks: TaskRow[] }) {
           <span className="text-right">Actions</span>
         </div>
         {filtered.map((t, i) => (
-          <Link
+          <div
             key={t.task_id}
-            href={`/tasks/${t.task_id}`}
-            className="grid min-w-[720px] grid-cols-[2.5fr_1fr_1fr_1fr_1fr_100px] items-center gap-3 border-b border-az-stroke px-5 py-4 text-sm transition hover:bg-white/[0.02] az-animate-fade-up"
+            className="relative grid min-w-[720px] grid-cols-[2.5fr_1fr_1fr_1fr_1fr_100px] items-center gap-3 border-b border-az-stroke px-5 py-4 text-sm transition hover:bg-white/[0.02] az-animate-fade-up"
             style={{ animationDelay: `${Math.min(i * 0.03, 0.25)}s` }}
           >
-            <div className="min-w-0">
+            <Link
+              href={`/tasks/${t.task_id}`}
+              className="absolute inset-0 z-0"
+              aria-label={`Open task ${t.title}`}
+            />
+            <div className="relative z-10 min-w-0 pointer-events-none">
               <div className="truncate font-semibold text-az-text">{t.title}</div>
               <div className="az-mono text-[10px] text-az-muted">EM-{String(t.task_id).slice(0, 6)}…</div>
             </div>
-            <div>
+            <div className="relative z-10 pointer-events-none">
               <CategoryPill category={t.category} />
             </div>
-            <div className="font-bold tabular-nums text-[#cdf56a]">
+            <div className="relative z-10 font-bold tabular-nums text-[#cdf56a] pointer-events-none">
               ${formatBounty(t.bounty_micros)} <span className="text-[10px] font-medium text-az-muted-2">USDC</span>
             </div>
-            <div>
+            <div className="relative z-10 pointer-events-none">
               <StatusPill status={t.status} />
             </div>
-            <span className="text-xs tabular-nums text-az-muted-2">—</span>
-            <div className="flex justify-end gap-1">
+            <div className="relative z-10 min-w-0 text-xs text-az-muted-2">
+              <div className="tabular-nums pointer-events-none">{formatUpdated(t.updated_at)}</div>
+              {t.status?.toLowerCase() === "completed" &&
+              (t.on_chain_tx_release || t.on_chain_tx_publish) ? (
+                <button
+                  type="button"
+                  title={t.on_chain_tx_release || t.on_chain_tx_publish || undefined}
+                  className="relative z-20 mt-0.5 block max-w-full truncate text-left az-mono text-[10px] text-[#cdf56a] underline-offset-2 hover:underline"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    window.open(
+                      explorerTxUrl((t.on_chain_tx_release || t.on_chain_tx_publish)!),
+                      "_blank",
+                      "noopener,noreferrer",
+                    );
+                  }}
+                >
+                  {shortTxHash((t.on_chain_tx_release || t.on_chain_tx_publish)!)}
+                </button>
+              ) : null}
+            </div>
+            <div className="relative z-10 flex justify-end gap-1 pointer-events-none">
               <span className="flex h-8 w-8 items-center justify-center rounded-[10px] border border-az-stroke-2 bg-white/[0.04] text-az-muted-2">
                 →
               </span>
             </div>
-          </Link>
+          </div>
         ))}
         </div>
       </Card>
@@ -131,50 +167,5 @@ export function MyTasksTable({ tasks }: { tasks: TaskRow[] }) {
         <p className="py-10 text-center text-sm text-az-muted-2">No tasks in this tab.</p>
       )}
     </>
-  );
-}
-
-export function LifecycleBar() {
-  const steps = [
-    { n: "✓", label: "Published", state: "done" as const },
-    { n: "✓", label: "Accepted", state: "done" as const },
-    { n: "✓", label: "In Progress", state: "done" as const },
-    { n: "4", label: "Submitted", state: "active" as const },
-    { n: "5", label: "Verifying", state: "todo" as const },
-    { n: "6", label: "Completed", state: "todo" as const },
-  ];
-
-  return (
-    <Card className="mb-6 flex min-w-0 items-center overflow-x-auto px-4 py-4 sm:px-5">
-      {steps.map((s, i) => (
-        <div key={s.label} className="flex min-w-[72px] flex-1 items-center">
-          <div className="flex w-full flex-col items-center text-center">
-            <div
-              className={`mb-1.5 flex h-7 w-7 items-center justify-center rounded-full border-2 text-[11px] font-bold ${
-                s.state === "done"
-                  ? "border-az-green bg-az-green text-[#0d1a0f]"
-                  : s.state === "active"
-                    ? "border-az-green bg-[var(--green-dim)] text-[#cdf56a]"
-                    : "border-az-stroke-2 text-az-muted"
-              }`}
-            >
-              {s.n}
-            </div>
-            <div
-              className={`text-[10px] font-semibold leading-tight ${
-                s.state === "active" || s.state === "done" ? "text-[#cdf56a]" : "text-az-muted"
-              }`}
-            >
-              {s.label}
-            </div>
-          </div>
-          {i < steps.length - 1 ? (
-            <div
-              className={`mb-5 h-0.5 w-6 shrink-0 sm:w-10 ${i < 3 ? "bg-az-green" : "bg-az-stroke-2"}`}
-            />
-          ) : null}
-        </div>
-      ))}
-    </Card>
   );
 }
