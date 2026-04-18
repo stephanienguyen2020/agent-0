@@ -5,55 +5,22 @@ import { useCallback, useEffect, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { PillGroup } from "@/components/ui/PillGroup";
 import { fetchLeaderboard, type LeaderboardExecutor } from "@/lib/api";
-
-function shortAddr(wallet: string | null | undefined): string {
-  if (!wallet || wallet.length < 12) return wallet || "—";
-  return `${wallet.slice(0, 6)}…${wallet.slice(-4)}`;
-}
-
-function formatEarnedMicros(micros: string): string {
-  const n = Number(micros);
-  if (!Number.isFinite(n) || n <= 0) return "$0";
-  const usd = n / 1_000_000;
-  if (usd >= 1_000_000) return `$${(usd / 1_000_000).toFixed(1)}M`;
-  if (usd >= 1_000) return `$${(usd / 1_000).toFixed(1)}K`;
-  return `$${usd.toFixed(usd >= 100 ? 0 : 1)}`;
-}
-
-function displayType(t: string): string {
-  const s = t.toLowerCase();
-  if (s === "human") return "Human";
-  if (s === "ai_agent") return "Agent";
-  if (s === "robot") return "Robot";
-  return t;
-}
-
-function hueForType(t: string): number {
-  const s = t.toLowerCase();
-  if (s === "human") return 240;
-  if (s === "robot") return 295;
-  return 145;
-}
-
-function glyphForType(t: string): string {
-  const s = t.toLowerCase();
-  if (s === "human") return "◉";
-  if (s === "robot") return "→";
-  return "◐";
-}
+import {
+  displayExecutorType,
+  formatEarnedMicros,
+  glyphForExecutorType,
+  hueForExecutorType,
+  ratePercentFromBps,
+  shortExecutorAddr,
+} from "@/lib/executor-format";
 
 function starCount(ratingBps: number): number {
   if (ratingBps <= 0) return 3;
   return Math.min(5, Math.max(1, Math.round(ratingBps / 2000)));
 }
 
-function ratePercent(ratingBps: number): string | null {
-  if (ratingBps <= 0) return null;
-  return `${Math.min(100, Math.round(ratingBps / 100))}%`;
-}
-
 function typePill(type: string) {
-  const hue = hueForType(type);
+  const hue = hueForExecutorType(type);
   const color = `oklch(0.78 0.18 ${hue})`;
   return (
     <span
@@ -63,7 +30,7 @@ function typePill(type: string) {
         background: `color-mix(in oklab, ${color} 12%, transparent)`,
       }}
     >
-      {displayType(type)}
+      {displayExecutorType(type)}
     </span>
   );
 }
@@ -78,9 +45,9 @@ function PodiumCard({
   cardClass: string;
 }) {
   const earned = formatEarnedMicros(exec.total_earned_micros);
-  const rate = ratePercent(exec.rating_bps) ?? "—";
+  const rate = ratePercentFromBps(exec.rating_bps) ?? "—";
   const tasks = exec.tasks_completed.toLocaleString();
-  const hue = hueForType(exec.type);
+  const hue = hueForExecutorType(exec.type);
   const ring = `oklch(0.78 0.2 ${hue})`;
 
   return (
@@ -102,7 +69,7 @@ function PodiumCard({
           background: `conic-gradient(from ${hue}deg, ${ring}, oklch(0.7 0.2 ${(hue + 90) % 360}), ${ring})`,
         }}
       >
-        {rank === 1 ? <span aria-hidden>✦</span> : <span aria-hidden>{glyphForType(exec.type)}</span>}
+        {rank === 1 ? <span aria-hidden>✦</span> : <span aria-hidden>{glyphForExecutorType(exec.type)}</span>}
       </div>
       <div
         className="mb-1 truncate text-[15px] font-semibold text-[color:var(--ink)]"
@@ -244,8 +211,8 @@ export function Leaderboard() {
       <div className="flex flex-col gap-3 md:hidden">
         {rest.map((r) => {
           const stars = r.rating_bps > 0 ? starCount(r.rating_bps) : 0;
-          const completion = ratePercent(r.rating_bps) ?? "—";
-          const hue = hueForType(r.type);
+          const completion = ratePercentFromBps(r.rating_bps) ?? "—";
+          const hue = hueForExecutorType(r.type);
           return (
             <Card key={r.executor_id} className="border border-[color:var(--line)] p-4 shadow-[var(--shadow-soft)]">
               <div className="mb-3 flex items-start justify-between gap-3">
@@ -254,11 +221,11 @@ export function Leaderboard() {
                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] text-[15px] text-[color:var(--bg)]"
                     style={{ background: `oklch(0.72 0.14 ${hue})` }}
                   >
-                    <span aria-hidden>{glyphForType(r.type)}</span>
+                    <span aria-hidden>{glyphForExecutorType(r.type)}</span>
                   </div>
                   <div className="min-w-0">
                     <div className="font-medium text-[color:var(--ink)]">{r.display_name}</div>
-                    <div className="az-mono text-[11px] text-[color:var(--mute)]">{shortAddr(r.wallet)}</div>
+                    <div className="az-mono text-[11px] text-[color:var(--mute)]">{shortExecutorAddr(r.wallet)}</div>
                   </div>
                 </div>
                 <span
@@ -310,8 +277,8 @@ export function Leaderboard() {
         </div>
         {rest.map((r) => {
           const stars = r.rating_bps > 0 ? starCount(r.rating_bps) : 0;
-          const completion = ratePercent(r.rating_bps) ?? "—";
-          const hue = hueForType(r.type);
+          const completion = ratePercentFromBps(r.rating_bps) ?? "—";
+          const hue = hueForExecutorType(r.type);
           return (
             <div
               key={r.executor_id}
@@ -327,11 +294,11 @@ export function Leaderboard() {
                   className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-[14px] text-[color:var(--bg)]"
                   style={{ background: `oklch(0.72 0.14 ${hue})` }}
                 >
-                  <span aria-hidden>{glyphForType(r.type)}</span>
+                  <span aria-hidden>{glyphForExecutorType(r.type)}</span>
                 </div>
                 <div className="min-w-0">
                   <div className="truncate font-medium text-[color:var(--ink)]">{r.display_name}</div>
-                  <div className="az-mono truncate text-[11px] text-[color:var(--mute)]">{shortAddr(r.wallet)}</div>
+                  <div className="az-mono truncate text-[11px] text-[color:var(--mute)]">{shortExecutorAddr(r.wallet)}</div>
                 </div>
               </div>
               {typePill(r.type)}

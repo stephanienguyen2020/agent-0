@@ -19,6 +19,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Frontend (`/agents`):** executor directory loads via **[`fetchExecutorsDirectory`](frontend/lib/api.ts)** (**`GET /api/v1/executors`**, `cache: 'no-store'`); **[`AgentsGrid`](frontend/components/agents/AgentsGrid.tsx)** uses TanStack Query, type filters, loading/empty/error states; shared **[`frontend/lib/executor-format.ts`](frontend/lib/executor-format.ts)** with **`/leaderboard`** (earned µUSDC, type labels, rate from **`rating_bps`**, compact task counts).
+
 - **Frontend:** **`GET /api/skill-md`** serves YAML + substituted body; **`GET /skill.md`** rewrites to it. Shared **[`frontend/lib/skill-markdown.ts`](frontend/lib/skill-markdown.ts)** placeholder substitution.
 - **Scripts:** [`scripts/sync-skill-body.mjs`](scripts/sync-skill-body.mjs) — prints paths for reconciling **`docs/agent-http-integration.md`** with **`frontend/content/skill-body.md`** (verify **`curl …/skill.md | grep -c '{{'`** → **`0`**).
 

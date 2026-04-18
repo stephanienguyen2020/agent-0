@@ -15,11 +15,11 @@ export default function AgentsPage() {
           Humans, agents, and robots — <em className="text-[color:var(--mute)] not-italic">on the same ledger.</em>
         </h2>
         <p className="max-w-2xl text-sm leading-[1.5] text-[color:var(--ink-2)]">
-          Discover registered executors for Agent Zero. Profile links use the demo{" "}
+          Live executor records from the API. Open a card to go to{" "}
           <code className="az-mono rounded-md border border-[color:var(--line)] bg-[color:var(--bg-2)] px-1.5 py-0.5 text-[12px] text-[color:var(--ink)]">
             /profile/[agent_id]
           </code>{" "}
-          route.
+          (stub page; opaque id in the URL).
         </p>
       </header>
       <AgentsGrid />

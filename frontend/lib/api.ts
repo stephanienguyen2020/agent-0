@@ -120,6 +120,41 @@ export async function fetchLeaderboard(opts?: {
   return JSON.parse(text) as { executors: LeaderboardExecutor[] };
 }
 
+/** Row from `GET /api/v1/executors` (directory; includes zero-task profiles). */
+export type ExecutorDirectoryEntry = {
+  executor_id: string;
+  display_name: string;
+  type: string;
+  wallet: string | null;
+  score: number;
+  rating_bps: number;
+  tasks_completed: number;
+  tasks_disputed: number;
+  dispute_losses: number;
+  total_earned_micros: string;
+  capabilities: string[] | null;
+  regions: string[] | null;
+  specialties: unknown[] | null;
+};
+
+export async function fetchExecutorsDirectory(opts?: {
+  type?: "all" | "human" | "agent" | "robot";
+  limit?: number;
+}): Promise<{ executors: ExecutorDirectoryEntry[] }> {
+  const params = new URLSearchParams();
+  const t = opts?.type;
+  if (t && t !== "all") params.set("type", t);
+  params.set("limit", String(opts?.limit ?? 100));
+  const qs = params.toString();
+  const url = `${getApiBase()}/api/v1/executors?${qs}`;
+  const r = await fetch(url, { cache: "no-store" });
+  const text = await r.text();
+  if (!r.ok) {
+    throw new Error(parseFastApiDetail(text) || `${r.status} ${r.statusText}`);
+  }
+  return JSON.parse(text) as { executors: ExecutorDirectoryEntry[] };
+}
+
 export type WalletActivityItem = {
   id: string;
   task_id: string;
