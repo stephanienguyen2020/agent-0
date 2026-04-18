@@ -42,4 +42,4 @@ forge verify-contract <ADDRESS> src/YourContract.sol:YourContract \
 
 If the API responds with `General exception occured when attempting to insert record`, that is a **server-side explorer error**—retry later or verify manually: run the same command with `--show-standard-json-input > verify.json` and upload **Solidity Standard JSON** on [testnet.opbnbscan.com](https://testnet.opbnbscan.com).
 
-Evidence / local SSL: `python3 ../scripts/debug_contract_verify_evidence.py` (writes `../.cursor/debug-767189.log`). If Python reports `CERTIFICATE_VERIFY_FAILED`, run `pip install certifi` or macOS **Install Certificates.command** for your Python.
+Evidence / local SSL: `python3 ../scripts/debug_contract_verify_evidence.py` (prints diagnostics to stdout). If Python reports `CERTIFICATE_VERIFY_FAILED`, run `pip install certifi` or macOS **Install Certificates.command** for your Python.

@@ -3,12 +3,12 @@
 #   emagents.verifier_worker | emagents.settlement | emagents.reputation
 # Start runs scripts/railway-worker-start.sh
 #
-# "..." merges the Python provider default (venv + base pip install) before our editable installs.
+# Repo root has no pyproject.toml, so Nixpacks "[...]" merges with an empty Python install — no
+# /opt/venv and no pip on PATH. Create the venv explicitly, then editable-install backend + agents.
 
 [phases.install]
 cmds = [
-  "...",
-  "pip install -e ./backend -e './agents[realtime]'",
+  "python3 -m venv --copies /opt/venv && . /opt/venv/bin/activate && pip install --upgrade pip setuptools wheel && pip install -e ./backend -e './agents[realtime]' && printf '\\nPATH=/opt/venv/bin:$PATH' >> /root/.profile && printf '\\nPATH=/opt/venv/bin:$PATH' >> /etc/environment",
 ]
 
 [start]

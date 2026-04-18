@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- **Railway / Nixpacks:** [backend/nixpacks.toml](backend/nixpacks.toml) — removed custom **`[phases.install]`** that ran **`pip`** before the Nixpacks venv existed (**`pip: command not found`** / exit **127**). Keep **`[start]`** only; default Python install phase creates **`/opt/venv`** then **`pip install .`**. [nixpacks.toml](nixpacks.toml) (workers) — **`[phases.install]`** now uses **`"..."`** so default venv steps run before **`pip install -e ./backend`** / **`agents[realtime]`**.
+- **Railway / Nixpacks:** [backend/nixpacks.toml](backend/nixpacks.toml) — removed custom **`[phases.install]`** that ran **`pip`** before the Nixpacks venv existed (**`pip: command not found`** / exit **127**). Keep **`[start]`** only; default Python install phase creates **`/opt/venv`** then **`pip install .`**. [nixpacks.toml](nixpacks.toml) (workers) — **`[phases.install]`** creates **`/opt/venv`** explicitly then **`pip install -e ./backend`** / **`agents[realtime]`** (repo root has no **`pyproject.toml`**, so **`"..."`** alone did not add venv steps); [scripts/railway-worker-start.sh](scripts/railway-worker-start.sh) prefers **`/opt/venv/bin/python`** when present.
 
 - **Railway / Nixpacks:** backend deploy no longer runs **`python -m em-backend`** (nonexistent module derived from the old **`[project] name`**); use **`Procfile`**, **`python -m em_api`**, and **`name = "em_api"`** ([backend/Procfile](backend/Procfile), [backend/em_api/__main__.py](backend/em_api/__main__.py)).
 
