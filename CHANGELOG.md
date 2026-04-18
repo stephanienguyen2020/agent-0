@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Frontend (`/tasks/chat`):** Assistant messages render Markdown via **`react-markdown`** + **`remark-breaks`** (lists, emphasis, code blocks; single newlines as hard breaks); inline **`tk_…`** task ids become links to **`/tasks/{id}`**. Chat layout uses a capped scroll region (**`max-h-[min(48vh,420px)]`**) with the composer and signing row under a top border (no nested bordered card inside the page card).
 - **Frontend UI (`/tasks/[id]`):** Task detail uses **[`EditorialPageShell`](frontend/components/dashboard/EditorialPageShell.tsx)** + **[`DashboardTopbar`](frontend/components/dashboard/DashboardTopbar.tsx)** (Market parity); **[`LifecycleBarDynamic`](frontend/components/tasks/LifecycleBarDynamic.tsx)**, **[`TaskSettlementDetails`](frontend/components/tasks/TaskSettlementDetails.tsx)**, and **[`TaskDetailActions`](frontend/components/TaskDetailActions.tsx)** use editorial CSS variables (**`var(--line)`**, **`var(--accent)`**, **`var(--ink)`**, etc.) and **`dashboard-btn`** / **`hero-primary-cta`** actions instead of legacy **`Topbar`** + **`az-*`** styling.
 - **Landing (`/`):** loads published marketplace tasks via **`GET /api/v1/tasks?status=published`** (Execution Market uses status **`published`**, not legacy `open`/`pending`); **`fetchTasks`** and task reads use **`getApiBase()`** for consistent **`NEXT_PUBLIC_API_URL`** behavior. Hero stats show **`$0.00` / `0`** when the pool is legitimately empty, and **`—`** only when the fetch fails — plus an alert banner if the API is unreachable. Settlement strip, hero footer, and sidebar filters are **BNB-only** (no Solana); the BNB chip matches **`bnb`**, **`opbnb`**, **`bnbchain`**, **`5611`**, and unset **`chain`** from the API. Header **Connect wallet** uses **Privy** (**`LandingConnectWallet`**) instead of linking to **`/dashboard`**.
 - **Agent skill (`GET /skill.md`):** canonical ingest is **raw **`text/markdown`** only** — **[`frontend/content/skill-body.md`](frontend/content/skill-body.md)** expanded with about, flows, features, curated API tables, **`skill_contract` 1.2.0** ([`frontend/lib/skill-markdown.ts`](frontend/lib/skill-markdown.ts)). **`/skill-md`** **redirects** to **`/skill.md`** ([`frontend/next.config.ts`](frontend/next.config.ts) **`redirects`**); landing nav **`skill.md`** targets **`/skill.md`**.
@@ -15,7 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Removed
 
-- **Frontend:** **`/skill-md`** App Router page that rendered **`react-markdown`** HTML — dropped so agents and humans hit the same **`GET /skill.md`** bundle (dependency **`react-markdown`** removed).
+- **Frontend:** **`/skill-md`** App Router page that rendered **`react-markdown`** HTML — dropped so agents and humans hit the same **`GET /skill.md`** raw Markdown bundle. **`react-markdown`** is not used for **`/skill.md`**; it is included for **`/tasks/chat`** assistant formatting only (see **Changed**).
 
 ### Added
 

@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import type { Components } from "react-markdown";
+import remarkBreaks from "remark-breaks";
 import { getAddress } from "viem";
 import { useAccount, useChainId, useSignTypedData, useSwitchChain } from "wagmi";
 
@@ -47,6 +50,121 @@ function formatDeadline(iso: string): string {
   } catch {
     return iso;
   }
+}
+
+/** Wrap task ids so Markdown renders them as in-app links. */
+function linkifyTaskIdsInMarkdown(src: string): string {
+  return src.replace(/\b(tk_[a-f0-9]{8,})\b/gi, "[$1](/tasks/$1)");
+}
+
+const assistantMarkdownComponents: Components = {
+  p: ({ children }) => (
+    <p className="mb-2 last:mb-0 [text-wrap:pretty]" style={{ color: "var(--ink)" }}>
+      {children}
+    </p>
+  ),
+  ul: ({ children }) => (
+    <ul className="mb-2 list-disc space-y-1 pl-5 [text-wrap:pretty]" style={{ color: "var(--ink)" }}>
+      {children}
+    </ul>
+  ),
+  ol: ({ children }) => (
+    <ol className="mb-2 list-decimal space-y-1 pl-5 [text-wrap:pretty]" style={{ color: "var(--ink)" }}>
+      {children}
+    </ol>
+  ),
+  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+  strong: ({ children }) => (
+    <strong className="font-semibold" style={{ color: "var(--ink)" }}>
+      {children}
+    </strong>
+  ),
+  em: ({ children }) => <em className="italic">{children}</em>,
+  h1: ({ children }) => (
+    <h3 className="mb-2 mt-3 text-base font-semibold first:mt-0" style={{ color: "var(--ink)" }}>
+      {children}
+    </h3>
+  ),
+  h2: ({ children }) => (
+    <h3 className="mb-2 mt-3 text-[15px] font-semibold first:mt-0" style={{ color: "var(--ink)" }}>
+      {children}
+    </h3>
+  ),
+  h3: ({ children }) => (
+    <h3 className="mb-2 mt-3 text-[15px] font-semibold first:mt-0" style={{ color: "var(--ink)" }}>
+      {children}
+    </h3>
+  ),
+  code: ({ className, children }) => {
+    const isBlock = typeof className === "string" && className.includes("language-");
+    if (isBlock) {
+      return <code className={className}>{children}</code>;
+    }
+    return (
+      <code
+        className="rounded px-1 py-0.5 font-mono text-[12px]"
+        style={{
+          border: "1px solid var(--line)",
+          background: "color-mix(in oklab, var(--card) 65%, var(--bg-2))",
+          color: "var(--ink)",
+        }}
+      >
+        {children}
+      </code>
+    );
+  },
+  pre: ({ children }) => (
+    <pre
+      className="mb-2 overflow-x-auto rounded-[10px] border px-3 py-2 font-mono text-[12px] leading-relaxed"
+      style={{
+        borderColor: "var(--line)",
+        background: "var(--card)",
+        color: "var(--ink)",
+      }}
+    >
+      {children}
+    </pre>
+  ),
+  a: ({ href, children }) => {
+    if (!href) return <span>{children}</span>;
+    if (href.startsWith("/")) {
+      return (
+        <Link href={href} className="break-all font-mono underline underline-offset-2" style={{ color: "var(--accent)" }}>
+          {children}
+        </Link>
+      );
+    }
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline underline-offset-2"
+        style={{ color: "var(--accent)" }}
+      >
+        {children}
+      </a>
+    );
+  },
+  blockquote: ({ children }) => (
+    <blockquote
+      className="mb-2 border-l-2 pl-3 [text-wrap:pretty]"
+      style={{ borderColor: "var(--accent)", color: "var(--ink-2)" }}
+    >
+      {children}
+    </blockquote>
+  ),
+};
+
+function AssistantMessageBody({ content }: { content: string }) {
+  const md = useMemo(() => linkifyTaskIdsInMarkdown(content), [content]);
+  return (
+    <div className="chat-assistant-md [&_p:first-child]:mt-0 [&_p:last-child]:mb-0">
+      <ReactMarkdown remarkPlugins={[remarkBreaks]} components={assistantMarkdownComponents}>
+        {md}
+      </ReactMarkdown>
+    </div>
+  );
 }
 
 function PendingActionsHint({ actions }: { actions: PendingAction[] }) {
@@ -247,90 +365,98 @@ export function ChatTaskPanel() {
 
   return (
     <div className="space-y-6">
-      <div
-        ref={listRef}
-        className="max-h-[min(420px,55vh)] space-y-3 overflow-y-auto rounded-[14px] px-4 py-4"
-        style={panelStyle}
-      >
-        {messages.length === 0 ? (
-          <p className="text-sm" style={{ color: "var(--mute)" }}>
-            Describe the task you want on the market — bounty in USDC, deadline, and what executors should do.
-            {!authenticated ? " You can draft without a wallet; connect to publish." : null}
-          </p>
-        ) : null}
-        {messages.map((m, i) => (
-          <div
-            key={`${i}-${m.role}`}
-            className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
-          >
+      <div className="flex min-h-0 flex-col overflow-hidden">
+        <div
+          ref={listRef}
+          className="min-h-0 max-h-[min(48vh,420px)] space-y-3 overflow-y-auto rounded-[12px] px-3 py-4 sm:px-4"
+          style={{ background: "var(--bg-2)" }}
+        >
+          {messages.length === 0 ? (
+            <p className="text-sm" style={{ color: "var(--mute)" }}>
+              Describe the task you want on the market — bounty in USDC, deadline, and what executors should do.
+              {!authenticated ? " You can draft without a wallet; connect to publish." : null}
+            </p>
+          ) : null}
+          {messages.map((m, i) => (
             <div
-              className="max-w-[92%] rounded-[14px] px-4 py-2.5 text-sm leading-relaxed [text-wrap:pretty]"
+              key={`${i}-${m.role}`}
+              className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
+            >
+              <div
+                className="max-w-[92%] rounded-[14px] px-4 py-2.5 text-sm leading-relaxed [text-wrap:pretty]"
+                style={{
+                  border: "1px solid var(--line)",
+                  background: m.role === "user" ? "color-mix(in oklab, var(--accent) 12%, var(--card))" : "var(--card)",
+                  color: "var(--ink)",
+                }}
+              >
+                {m.role === "user" ? (
+                  <span className="whitespace-pre-wrap">{m.content}</span>
+                ) : (
+                  <AssistantMessageBody content={m.content} />
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="border-t pt-4 sm:pt-5" style={{ borderColor: "var(--line)" }}>
+          {chatErr ? (
+            <p
+              className="mb-3 rounded-[10px] border px-3 py-2 text-sm [text-wrap:pretty] whitespace-pre-wrap"
               style={{
-                border: "1px solid var(--line)",
-                background: m.role === "user" ? "color-mix(in oklab, var(--accent) 12%, var(--card))" : "var(--bg-2)",
-                color: "var(--ink)",
+                borderColor: "color-mix(in oklab, var(--danger) 45%, var(--line))",
+                background: "color-mix(in oklab, var(--danger) 8%, var(--card))",
+                color: "var(--ink-2)",
               }}
             >
-              {m.content}
-            </div>
+              {chatErr}
+            </p>
+          ) : null}
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <textarea
+              className={`${inputClass} min-h-[88px] flex-1 resize-y`}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Type your message…"
+              disabled={busy}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void sendChat();
+                }
+              }}
+            />
+            <button
+              type="button"
+              disabled={busy || !input.trim()}
+              onClick={() => void sendChat()}
+              className="dashboard-btn hero-primary-cta shine relative inline-flex h-11 shrink-0 items-center justify-center rounded-full border border-[color:var(--accent)] bg-[color:var(--accent)] px-6 text-[13px] font-semibold text-[color:var(--ed-on-accent)] disabled:opacity-45"
+            >
+              {busy ? "Sending…" : "Send"}
+            </button>
           </div>
-        ))}
+
+          {!authenticated ? (
+            <p className="mt-3 text-sm" style={{ color: "var(--ink-2)" }}>
+              <button
+                type="button"
+                onClick={() => login()}
+                className="font-semibold underline underline-offset-2"
+                style={{ color: "var(--accent)" }}
+              >
+                Connect wallet
+              </button>{" "}
+              to publish with x402 when your draft is ready (same flow as Post a task).
+            </p>
+          ) : (
+            <p className="mt-3 font-mono text-xs" style={{ color: "var(--mute)" }}>
+              Signing: {normalizedWallet ? shortAddr(normalizedWallet) : "—"}
+            </p>
+          )}
+        </div>
       </div>
-
-      {chatErr ? (
-        <p
-          className="rounded-[10px] border px-3 py-2 text-sm [text-wrap:pretty] whitespace-pre-wrap"
-          style={{
-            borderColor: "color-mix(in oklab, var(--danger) 45%, var(--line))",
-            background: "color-mix(in oklab, var(--danger) 8%, var(--card))",
-            color: "var(--ink-2)",
-          }}
-        >
-          {chatErr}
-        </p>
-      ) : null}
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <textarea
-          className={`${inputClass} min-h-[88px] flex-1 resize-y`}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Type your message…"
-          disabled={busy}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              void sendChat();
-            }
-          }}
-        />
-        <button
-          type="button"
-          disabled={busy || !input.trim()}
-          onClick={() => void sendChat()}
-          className="dashboard-btn hero-primary-cta shine relative inline-flex h-11 shrink-0 items-center justify-center rounded-full border border-[color:var(--accent)] bg-[color:var(--accent)] px-6 text-[13px] font-semibold text-[color:var(--ed-on-accent)] disabled:opacity-45"
-        >
-          {busy ? "Sending…" : "Send"}
-        </button>
-      </div>
-
-      {!authenticated ? (
-        <p className="text-sm" style={{ color: "var(--ink-2)" }}>
-          <button
-            type="button"
-            onClick={() => login()}
-            className="font-semibold underline underline-offset-2"
-            style={{ color: "var(--accent)" }}
-          >
-            Connect wallet
-          </button>{" "}
-          to publish with x402 when your draft is ready (same flow as Post a task).
-        </p>
-      ) : (
-        <p className="font-mono text-xs" style={{ color: "var(--mute)" }}>
-          Signing: {normalizedWallet ? shortAddr(normalizedWallet) : "—"}
-        </p>
-      )}
 
       {pendingActions.length > 0 ? <PendingActionsHint actions={pendingActions} /> : null}
 
