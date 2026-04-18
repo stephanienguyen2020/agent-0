@@ -9,10 +9,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - **Landing (`/`):** loads published marketplace tasks via **`GET /api/v1/tasks?status=published`** (Execution Market uses status **`published`**, not legacy `open`/`pending`); **`fetchTasks`** and task reads use **`getApiBase()`** for consistent **`NEXT_PUBLIC_API_URL`** behavior. Hero stats show **`$0.00` / `0`** when the pool is legitimately empty, and **`—`** only when the fetch fails — plus an alert banner if the API is unreachable. Settlement strip, hero footer, and sidebar filters are **BNB-only** (no Solana); the BNB chip matches **`bnb`**, **`opbnb`**, **`bnbchain`**, **`5611`**, and unset **`chain`** from the API. Header **Connect wallet** uses **Privy** (**`LandingConnectWallet`**) instead of linking to **`/dashboard`**.
+- **Agent skill (`GET /skill.md`):** canonical ingest is **raw **`text/markdown`** only** — **[`frontend/content/skill-body.md`](frontend/content/skill-body.md)** expanded with about, flows, features, curated API tables, **`skill_contract` 1.2.0** ([`frontend/lib/skill-markdown.ts`](frontend/lib/skill-markdown.ts)). **`/skill-md`** **redirects** to **`/skill.md`** ([`frontend/next.config.ts`](frontend/next.config.ts) **`redirects`**); landing nav **`skill.md`** targets **`/skill.md`**.
+- **Frontend UI (`/tasks/new`):** **[`EditorialPageShell`](frontend/components/dashboard/EditorialPageShell.tsx)** + **[`DashboardTopbar`](frontend/components/dashboard/DashboardTopbar.tsx)** (same as Market); intro + form surfaces use **`var(--line)` / `var(--card)` / `var(--shadow-soft)`**; **[`PostTaskForm`](frontend/app/(app)/tasks/new/PostTaskForm.tsx)** inputs, signing block, fee summary, and primary actions align with **`TasksMarket`** editorial tokens and **`dashboard-btn`** accent styling (replaces legacy **`Topbar`** + **`az-stroke`** / **`#cdf56a`** mix).
+
+### Removed
+
+- **Frontend:** **`/skill-md`** App Router page that rendered **`react-markdown`** HTML — dropped so agents and humans hit the same **`GET /skill.md`** bundle (dependency **`react-markdown`** removed).
 
 ### Added
 
-- **Frontend:** **`/skill-md`** (App Shell) renders **`frontend/content/skill-body.md`** with **`react-markdown`**; landing nav includes a **`skill.md`** link.
+- **Frontend:** **`GET /api/skill-md`** serves YAML + substituted body; **`GET /skill.md`** rewrites to it. Shared **[`frontend/lib/skill-markdown.ts`](frontend/lib/skill-markdown.ts)** placeholder substitution.
+- **Scripts:** [`scripts/sync-skill-body.mjs`](scripts/sync-skill-body.mjs) — prints paths for reconciling **`docs/agent-http-integration.md`** with **`frontend/content/skill-body.md`** (verify **`curl …/skill.md | grep -c '{{'`** → **`0`**).
 
 ### Fixed
 

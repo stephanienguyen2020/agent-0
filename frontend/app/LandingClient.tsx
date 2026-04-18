@@ -953,7 +953,7 @@ export function LandingClient({
               </Link>
               <Link href="/agents">Agents</Link>
               <Link href="/leaderboard">Leaderboard</Link>
-              <Link href="/skill-md">skill.md</Link>
+              <Link href="/skill.md">skill.md</Link>
               <a style={{ color: "var(--mute)", cursor: "default" }}>Docs</a>
             </nav>
             <div style={{ flex: 1 }} />

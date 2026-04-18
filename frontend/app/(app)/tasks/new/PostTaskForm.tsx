@@ -7,7 +7,6 @@ import { type Address, getAddress, type Hex } from "viem";
 import { useAccount, useChainId, useSignTypedData, useSwitchChain } from "wagmi";
 
 import { usePrivyConfigured } from "@/app/providers";
-import { BtnPrimary } from "@/components/ui/Button";
 import { createTask, getEscrowFeeBps, type TaskCreateBody } from "@/lib/api";
 import { ESCROW_FEE_BPS } from "@/lib/constants";
 import { opBNBTestnet } from "@/lib/chains";
@@ -37,8 +36,30 @@ const CATEGORIES = [
 const devSkipAllowed =
   process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_ALLOW_X402_SKIP === "true";
 
+/** Editorial inputs — match Market / TasksMarket tokens inside `.dashboard-editorial`. */
 const inputClass =
-  "w-full rounded-[14px] border border-az-stroke-2 bg-white/[0.04] px-4 py-3 text-sm text-az-text outline-none placeholder:text-az-muted focus:border-[rgba(182,242,74,0.35)]";
+  "w-full rounded-[14px] border border-[color:var(--line)] bg-[color:var(--card)] px-4 py-3 text-sm outline-none transition-[border-color,box-shadow] " +
+  "text-[color:var(--ink)] placeholder:text-[color:var(--mute)] " +
+  "focus:border-[color:var(--accent)] focus:ring-1 focus:ring-[color:color-mix(in_oklab,var(--accent)_35%,transparent)]";
+
+function fieldLabelClass() {
+  return "az-mono block text-[10px] font-semibold uppercase tracking-[0.14em]";
+}
+
+function primaryBtnClass(disabled?: boolean) {
+  return [
+    "dashboard-btn inline-flex h-11 min-w-[140px] items-center justify-center gap-2 rounded-[14px] px-6 text-[13px] font-semibold transition disabled:opacity-50",
+    disabled ? "" : "hover:-translate-y-px",
+  ].join(" ");
+}
+
+function FieldLabel({ htmlFor, children }: { htmlFor: string; children: React.ReactNode }) {
+  return (
+    <label htmlFor={htmlFor} className={fieldLabelClass()} style={{ color: "var(--mute)" }}>
+      {children}
+    </label>
+  );
+}
 
 export function PostTaskForm() {
   const privyOk = usePrivyConfigured();
@@ -204,7 +225,6 @@ export function PostTaskForm() {
       totalMicros,
       deadlineLocal,
       skipPayment,
-      escrowFeeBps,
       mockUsdc,
       escrow,
       signTypedDataAsync,
@@ -213,21 +233,41 @@ export function PostTaskForm() {
     ],
   );
 
+  const panelStyle = {
+    border: "1px solid var(--line)",
+    background: "var(--card)",
+    boxShadow: "var(--shadow-soft)",
+  } as const;
+
   if (!privyOk) {
     return (
-      <p className="text-sm text-amber-200/90">
-        Set <code className="rounded bg-black/30 px-1">NEXT_PUBLIC_PRIVY_APP_ID</code> to use wallet actions.
+      <p className="text-sm leading-relaxed [text-wrap:pretty]" style={{ color: "var(--ink-2)" }}>
+        Set{" "}
+        <code
+          className="rounded-md px-1.5 py-0.5 az-mono text-[12px]"
+          style={{ border: "1px solid var(--line)", background: "var(--bg-2)", color: "var(--ink)" }}
+        >
+          NEXT_PUBLIC_PRIVY_APP_ID
+        </code>{" "}
+        to use wallet actions.
       </p>
     );
   }
 
   if (!authenticated) {
     return (
-      <div className="space-y-3">
-        <p className="text-sm text-az-muted-2">Connect your wallet to publish a task.</p>
-        <BtnPrimary type="button" onClick={() => login()}>
+      <div className="space-y-4">
+        <p className="text-sm leading-relaxed" style={{ color: "var(--ink-2)" }}>
+          Connect your wallet to publish a task.
+        </p>
+        <button
+          type="button"
+          onClick={() => login()}
+          className={primaryBtnClass()}
+          style={{ background: "var(--accent)", color: "var(--bg)", border: "1px solid var(--accent)" }}
+        >
           Connect wallet
-        </BtnPrimary>
+        </button>
       </div>
     );
   }
@@ -235,17 +275,24 @@ export function PostTaskForm() {
   if (result) {
     return (
       <div className="space-y-4">
-        <p className="text-sm text-[#cdf56a]">
-          Task published: <code className="break-all text-az-text">{result.task_id}</code>
+        <p className="text-sm font-medium" style={{ color: "var(--accent)" }}>
+          Task published:{" "}
+          <code className="break-all font-mono text-[13px]" style={{ color: "var(--ink)" }}>
+            {result.task_id}
+          </code>
         </p>
         {result.tx ? (
-          <p className="text-xs text-az-muted-2">
-            Tx: <code className="break-all">{result.tx}</code>
+          <p className="text-xs" style={{ color: "var(--mute)" }}>
+            Tx:{" "}
+            <code className="break-all font-mono" style={{ color: "var(--ink-2)" }}>
+              {result.tx}
+            </code>
           </p>
         ) : null}
         <Link
           href={`/tasks/${result.task_id}`}
-          className="inline-block text-sm font-semibold text-[#cdf56a] underline underline-offset-2"
+          className="inline-block text-sm font-semibold underline underline-offset-2"
+          style={{ color: "var(--accent)" }}
         >
           View task
         </Link>
@@ -255,15 +302,17 @@ export function PostTaskForm() {
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
-      <div className="rounded-[14px] border border-az-stroke-2 bg-white/[0.03] px-4 py-3">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-az-muted">Signing address</p>
-        <p className="mt-1 font-mono text-sm text-az-text">{normalizedWallet ? shortAddr(normalizedWallet) : "—"}</p>
+      <div className="w-full rounded-[14px] px-4 py-4" style={panelStyle}>
+        <p className={fieldLabelClass()} style={{ color: "var(--mute)" }}>
+          Signing address
+        </p>
+        <p className="mt-2 w-full break-all font-mono text-sm" style={{ color: "var(--ink)" }}>
+          {normalizedWallet ? shortAddr(normalizedWallet) : "—"}
+        </p>
       </div>
 
       <div className="space-y-2">
-        <label className="text-xs font-semibold text-az-muted-2" htmlFor="pt-title">
-          Title
-        </label>
+        <FieldLabel htmlFor="pt-title">Title</FieldLabel>
         <input
           id="pt-title"
           className={inputClass}
@@ -275,9 +324,7 @@ export function PostTaskForm() {
       </div>
 
       <div className="space-y-2">
-        <label className="text-xs font-semibold text-az-muted-2" htmlFor="pt-instructions">
-          Instructions
-        </label>
+        <FieldLabel htmlFor="pt-instructions">Instructions</FieldLabel>
         <textarea
           id="pt-instructions"
           className={`${inputClass} min-h-[120px] resize-y`}
@@ -288,9 +335,7 @@ export function PostTaskForm() {
       </div>
 
       <div className="space-y-2">
-        <label className="text-xs font-semibold text-az-muted-2" htmlFor="pt-category">
-          Category
-        </label>
+        <FieldLabel htmlFor="pt-category">Category</FieldLabel>
         <select
           id="pt-category"
           className={inputClass}
@@ -305,11 +350,9 @@ export function PostTaskForm() {
         </select>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <label className="text-xs font-semibold text-az-muted-2" htmlFor="pt-bounty">
-            Bounty (USDC)
-          </label>
+      <div className="grid w-full gap-4 sm:grid-cols-2">
+        <div className="min-w-0 space-y-2">
+          <FieldLabel htmlFor="pt-bounty">Bounty (USDC)</FieldLabel>
           <input
             id="pt-bounty"
             className={inputClass}
@@ -319,10 +362,8 @@ export function PostTaskForm() {
             placeholder="e.g. 10"
           />
         </div>
-        <div className="space-y-2">
-          <label className="text-xs font-semibold text-az-muted-2" htmlFor="pt-deadline">
-            Deadline (local)
-          </label>
+        <div className="min-w-0 space-y-2">
+          <FieldLabel htmlFor="pt-deadline">Deadline (local)</FieldLabel>
           <input
             id="pt-deadline"
             type="datetime-local"
@@ -333,51 +374,98 @@ export function PostTaskForm() {
         </div>
       </div>
 
-      <div className="rounded-[14px] border border-az-stroke-2 bg-white/[0.02] px-4 py-3 text-sm text-az-muted-2">
-        <p>
+      <div className="rounded-[14px] px-4 py-4 text-sm" style={panelStyle}>
+        <p style={{ color: "var(--ink-2)" }}>
           Escrow fee ({(escrowFeeBps / 100).toFixed(2)}% of bounty):{" "}
-          <span className="font-mono text-az-text">
+          <span className="font-mono" style={{ color: "var(--ink)" }}>
             {(feeMicros / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC
           </span>
         </p>
-        <p className="mt-1">
+        <p className="mt-2" style={{ color: "var(--ink-2)" }}>
           Total authorization (bounty + fee):{" "}
-          <span className="font-mono text-[#cdf56a]">
+          <span className="font-mono font-medium" style={{ color: "var(--accent)" }}>
             {(totalMicros / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC
           </span>{" "}
-          <span className="text-az-muted">({totalMicros.toLocaleString()} µUSDC)</span>
+          <span style={{ color: "var(--mute)" }}>({totalMicros.toLocaleString()} µUSDC)</span>
         </p>
         {!mockUsdc || !escrow ? (
-          <p className="mt-2 text-xs text-amber-200/80">
-            Set <code className="rounded bg-black/30 px-1">NEXT_PUBLIC_MOCK_USDC_ADDRESS</code> and{" "}
-            <code className="rounded bg-black/30 px-1">NEXT_PUBLIC_EM_ESCROW_ADDRESS</code> to sign x402 payments in the
-            browser. Without them, publish only works if the API has x402 enforcement off.
+          <p
+            className="mt-3 rounded-[10px] border px-3 py-2 text-xs leading-relaxed [text-wrap:pretty]"
+            style={{
+              borderColor: "color-mix(in oklab, var(--accent-2) 45%, var(--line))",
+              background: "color-mix(in oklab, var(--accent-2) 8%, var(--card))",
+              color: "var(--ink-2)",
+            }}
+          >
+            Set{" "}
+            <code
+              className="rounded px-1 py-0.5 az-mono text-[11px]"
+              style={{ border: "1px solid var(--line)", background: "var(--bg-2)", color: "var(--ink)" }}
+            >
+              NEXT_PUBLIC_MOCK_USDC_ADDRESS
+            </code>{" "}
+            and{" "}
+            <code
+              className="rounded px-1 py-0.5 az-mono text-[11px]"
+              style={{ border: "1px solid var(--line)", background: "var(--bg-2)", color: "var(--ink)" }}
+            >
+              NEXT_PUBLIC_EM_ESCROW_ADDRESS
+            </code>{" "}
+            to sign x402 payments in the browser. Without them, publish only works if the API has x402 enforcement off.
           </p>
         ) : null}
       </div>
 
       {devSkipAllowed ? (
-        <label className="flex cursor-pointer items-start gap-3 text-sm text-az-muted-2">
+        <label className="flex cursor-pointer items-start gap-3 text-sm" style={{ color: "var(--ink-2)" }}>
           <input
             type="checkbox"
-            className="mt-1 rounded border-az-stroke-2"
+            className="mt-1 h-4 w-4 rounded border align-top"
+            style={{ borderColor: "var(--line)", accentColor: "var(--accent)" }}
             checked={skipPayment}
             onChange={(e) => setSkipPayment(e.target.checked)}
           />
-          <span>
-            Skip x402 payment (local dev only). Sends <code className="rounded bg-black/20 px-1">X-PAYMENT-SKIP: 1</code>{" "}
-            — requires API <code className="rounded bg-black/20 px-1">ENVIRONMENT=development</code>.
+          <span className="[text-wrap:pretty]">
+            Skip x402 payment (local dev only). Sends{" "}
+            <code
+              className="rounded px-1 py-0.5 az-mono text-[12px]"
+              style={{ border: "1px solid var(--line)", background: "var(--bg-2)", color: "var(--ink)" }}
+            >
+              X-PAYMENT-SKIP: 1
+            </code>{" "}
+            — requires API{" "}
+            <code
+              className="rounded px-1 py-0.5 az-mono text-[12px]"
+              style={{ border: "1px solid var(--line)", background: "var(--bg-2)", color: "var(--ink)" }}
+            >
+              ENVIRONMENT=development
+            </code>
+            .
           </span>
         </label>
       ) : null}
 
       {err ? (
-        <p className="text-sm text-amber-300/90 [text-wrap:pretty] whitespace-pre-wrap">{err}</p>
+        <p
+          className="rounded-[10px] border px-3 py-2 text-sm [text-wrap:pretty] whitespace-pre-wrap"
+          style={{
+            borderColor: "color-mix(in oklab, var(--danger) 45%, var(--line))",
+            background: "color-mix(in oklab, var(--danger) 8%, var(--card))",
+            color: "var(--ink-2)",
+          }}
+        >
+          {err}
+        </p>
       ) : null}
 
-      <BtnPrimary type="submit" disabled={busy}>
+      <button
+        type="submit"
+        disabled={busy}
+        className={primaryBtnClass(busy)}
+        style={{ background: "var(--accent)", color: "var(--bg)", border: "1px solid var(--accent)" }}
+      >
         {busy ? "Publishing…" : "Publish task"}
-      </BtnPrimary>
+      </button>
     </form>
   );
 }
