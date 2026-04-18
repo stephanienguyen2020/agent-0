@@ -1,0 +1,13 @@
+# Railway / Nixpacks — emagents workers (set service Root Directory to repo root `.`)
+# Set env WORKER_MODULE per service:
+#   emagents.verifier_worker | emagents.settlement | emagents.reputation
+# Start runs scripts/railway-worker-start.sh
+
+[phases.install]
+cmds = [
+  "pip install --upgrade pip setuptools wheel",
+  "pip install -e ./backend -e './agents[realtime]'",
+]
+
+[start]
+cmd = "sh scripts/railway-worker-start.sh"

@@ -1,0 +1,8 @@
+# Railway / Nixpacks — FastAPI backend (set service Root Directory to `backend/`)
+# Health: GET /health
+
+[phases.install]
+cmds = ["pip install --upgrade pip setuptools wheel", "pip install -e ."]
+
+[start]
+cmd = "sh -c 'uvicorn em_api.main:app --host 0.0.0.0 --port ${PORT:-8000}'"

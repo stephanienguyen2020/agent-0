@@ -14,10 +14,10 @@ export CHAIN_ID=5611
 export MOCK_USDC_ADDRESS=0x...
 export EM_ESCROW_ADDRESS=0x...
 export FACILITATOR_PRIVATE_KEY=0x...   # funded with tBNB for gas
-uvicorn app.main:app --host 0.0.0.0 --port 8402
+uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8402}
 ```
 
-Point the API at it with `X402_FACILITATOR_URL=http://localhost:8402` (see root `.env.example`).
+Point the API at it with `X402_FACILITATOR_URL=http://localhost:8402` (see root `.env.example`). On Railway, **`PORT`** is injected; the Docker image defaults to **8402** when unset.
 
 ## Docker Compose (monorepo root)
 

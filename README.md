@@ -31,4 +31,4 @@ Progress is tracked in [docs/05-implementation-plan.md](docs/05-implementation-p
 
 ## Deployed URLs
 
-Fill in after Vercel/Railway setup (see [docs/15-deployment-devops.md](docs/15-deployment-devops.md)).
+Railway checklist: [docs/railway-deploy.md](docs/railway-deploy.md); domain layout and env master list: [docs/15-deployment-devops.md](docs/15-deployment-devops.md).
