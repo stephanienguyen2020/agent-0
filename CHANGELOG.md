@@ -29,6 +29,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **API (`POST /api/v1/tasks/{id}/accept`):** No more **500** from **`ContractCustomError`** / **`InvalidStatus(Published, Accepted)`** when the escrow task is already **Accepted** on-chain (e.g. first accept mined but DB lag, or double-submit). Guards on **Supabase `status`** and **`escrow_task_status_uint`**; **`acceptTask`** is simulated with **`eth_call`** before **`build_transaction`** (**[`chain.py`](backend/em_api/services/chain.py)** **`AcceptTaskRejected`**). Same executor wallet reconciles DB when chain is ahead (**`reconciled: true`**). Errors return **409** with a readable **`detail`** instead of an ASGI traceback.
+
 - **Frontend (x402 publish / opBNB):** Shared **[`wagmi-config`](frontend/lib/wagmi-config.ts)** (`WagmiProvider` uses the same singleton). **`ensureOpBNBForX402Publish`** ([`ensure-opbnb-chain.ts`](frontend/lib/ensure-opbnb-chain.ts)) aligns the wallet using **`getChainId(config)`** before EIP-712 signing instead of **`readInjectedChainId()`** on **`window.ethereum`**, so users are not blocked when the header/Privy/wagmi are already on **5611** but another browser extension reports a different chain. Used by **[`PostTaskForm`](frontend/app/(app)/tasks/new/PostTaskForm.tsx)** and **[`publish-task-client`](frontend/lib/publish-task-client.ts)** / Create with AI publish.
 
 - **Create with AI (`/tasks/chat`):** **[`ChatTaskPanel`](frontend/components/tasks/ChatTaskPanel.tsx)** keeps the last validated draft when the user sends a short confirmation (**yes**, **ok**, **proceed**, etc.) but **`POST /api/v1/tasks/assistant-chat`** returns **`draft: null`**, so the **Draft ready** panel still appears after “review the details” turns.

@@ -8,11 +8,16 @@ from typing import Any
 from eth_account import Account
 from web3 import Web3
 from web3.contract import Contract
-from web3.exceptions import ContractLogicError
+from web3.exceptions import ContractCustomError, ContractLogicError
 
 from em_api.config import settings
 
 logger = logging.getLogger(__name__)
+
+# EMEscrow.TaskStatus enum uint8 (contracts/src/EMEscrow.sol)
+ESCROW_TASK_STATUS_NONE = 0
+ESCROW_TASK_STATUS_PUBLISHED = 1
+ESCROW_TASK_STATUS_ACCEPTED = 2
 
 
 class PreflightRejected(Exception):
@@ -21,6 +26,15 @@ class PreflightRejected(Exception):
     def __init__(self, detail: str) -> None:
         super().__init__(detail)
         self.detail = detail
+
+
+class AcceptTaskRejected(Exception):
+    """acceptTask eth_call / gas estimation would revert (e.g. InvalidStatus)."""
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail)
+        self.detail = detail
+
 
 ERC20_MIN_ABI: list[dict[str, Any]] = [
     {
@@ -317,6 +331,22 @@ class ChainService:
             return int(row[9])
         except Exception as e:
             logger.warning("escrow_task_status_uint failed: %s", e)
+            return None
+
+    def escrow_task_snapshot(self, task_id: str) -> dict[str, Any] | None:
+        """Public `tasks(taskId)` row for reconciliation (executor, status, …)."""
+        if not self._escrow:
+            return None
+        tid = task_id_to_bytes32(task_id)
+        try:
+            row = self._escrow.functions.tasks(tid).call()
+            return {
+                "executor": row[3],
+                "executorErc8004Id": int(row[4]),
+                "status": int(row[9]),
+            }
+        except Exception as e:
+            logger.warning("escrow_task_snapshot failed: %s", e)
             return None
 
     def latest_task_verified_tx_hash(self, task_id: str, *, max_blocks_back: int = 80_000) -> str | None:
@@ -634,13 +664,26 @@ class ChainService:
         tid = task_id_to_bytes32(task_id)
         ex = Web3.to_checksum_address(executor_wallet)
         fn = self._escrow.functions.acceptTask(tid, ex, executor_erc8004_id)
-        tx = fn.build_transaction(
-            {
-                "from": self._account.address,
-                "nonce": self._w3.eth.get_transaction_count(self._account.address),
-                "chainId": settings.chain_id,
-            }
-        )
+        try:
+            fn.call({"from": self._account.address})
+        except (ContractLogicError, ContractCustomError) as e:
+            logger.warning("acceptTask simulation reverted: %s", e)
+            raise AcceptTaskRejected(
+                "acceptTask would revert on-chain (wrong task status, deadline, executor, or EM_AGENT_ROLE)."
+            ) from e
+        try:
+            tx = fn.build_transaction(
+                {
+                    "from": self._account.address,
+                    "nonce": self._w3.eth.get_transaction_count(self._account.address),
+                    "chainId": settings.chain_id,
+                }
+            )
+        except (ContractLogicError, ContractCustomError) as e:
+            logger.warning("acceptTask build_transaction reverted: %s", e)
+            raise AcceptTaskRejected(
+                "acceptTask gas estimation failed (task may already be accepted on-chain)."
+            ) from e
         tx = _fill_gas(self._w3, tx)
         signed = self._account.sign_transaction(tx)
         h = self._w3.eth.send_raw_transaction(signed.raw_transaction)

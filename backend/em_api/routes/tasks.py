@@ -31,7 +31,7 @@ from em_api.services.verification_ops import (
     record_completion_reputation,
     record_dispute_loss_reputation,
 )
-from em_api.services.chain import PreflightRejected
+from em_api.services.chain import AcceptTaskRejected, ESCROW_TASK_STATUS_ACCEPTED, PreflightRejected
 from em_api.services.task_assistant_llm import assistant_chat_turn
 from em_api.services.task_draft_llm import draft_chat_gemini
 from em_api.services.x402_facilitator import settle_payment
@@ -546,7 +546,51 @@ def accept_task(task_id: str, body: TaskAcceptBody, chain=Depends(get_chain)) ->
         else:
             raise HTTPException(403, f"unsupported executor type: {etype}")
 
-    tx = chain.accept_task(task_id, body.executor_wallet, body.executor_erc8004_id)
+    db_status = str(task_row.get("status") or "").strip().lower().replace(" ", "_")
+    if db_status != "published":
+        raise HTTPException(
+            409,
+            f"task cannot be accepted in status {task_row.get('status')!r} (expected published)",
+        )
+
+    chain_st = chain.escrow_task_status_uint(task_id)
+    ex_cs = Web3.to_checksum_address(body.executor_wallet)
+
+    if chain_st == ESCROW_TASK_STATUS_ACCEPTED:
+        snap = chain.escrow_task_snapshot(task_id)
+        if snap and Web3.to_checksum_address(snap["executor"]) == ex_cs:
+            now = datetime.now(timezone.utc).isoformat()
+            existing_tx = task_row.get("on_chain_tx_accept")
+            supa.table("tasks").update(
+                {
+                    "executor_id": ex_id,
+                    "status": "accepted",
+                    "accepted_at": task_row.get("accepted_at") or now,
+                    "on_chain_tx_accept": existing_tx,
+                }
+            ).eq("task_id", task_id).execute()
+            return {
+                "task_id": task_id,
+                "on_chain_tx_accept": existing_tx,
+                "reconciled": True,
+            }
+        raise HTTPException(
+            409,
+            "This task is already accepted on-chain (use the executor wallet that accepted it, or refresh if the UI is stale).",
+        )
+
+    if chain_st is not None and chain_st > ESCROW_TASK_STATUS_ACCEPTED:
+        raise HTTPException(
+            409,
+            f"task on-chain is past the accept stage (escrow status uint={chain_st})",
+        )
+
+    try:
+        tx = chain.accept_task(task_id, body.executor_wallet, body.executor_erc8004_id)
+    except AcceptTaskRejected as e:
+        raise HTTPException(409, e.detail) from e
+    if not tx:
+        raise HTTPException(503, "escrow signer not configured (EM_AGENT_PRIVATE_KEY / EM_ESCROW)")
     now = datetime.now(timezone.utc).isoformat()
     supa.table("tasks").update(
         {

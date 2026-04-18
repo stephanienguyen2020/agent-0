@@ -1,6 +1,7 @@
 "use client";
 
 import { usePrivy, useWallets } from "@privy-io/react-auth";
+import { useRouter } from "next/navigation";
 import { useCallback, useId, useState, type FormEvent } from "react";
 import { useAccount } from "wagmi";
 
@@ -33,6 +34,7 @@ const TERMINAL_STATUSES = new Set([
 ]);
 
 function TaskDetailActionsInner({ task }: { task: TaskRow }) {
+  const router = useRouter();
   const { authenticated, login } = usePrivy();
   const { address } = useAccount();
   const { wallets } = useWallets();
@@ -73,6 +75,7 @@ function TaskDetailActionsInner({ task }: { task: TaskRow }) {
         const t = await r.text();
         throw new Error(t || r.statusText);
       }
+      router.refresh();
     });
 
   const onSubmit = (ev: FormEvent<HTMLFormElement>) => {
