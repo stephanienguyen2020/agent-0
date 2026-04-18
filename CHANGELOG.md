@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Railway / Nixpacks:** [backend/nixpacks.toml](backend/nixpacks.toml) — removed custom **`[phases.install]`** that ran **`pip`** before the Nixpacks venv existed (**`pip: command not found`** / exit **127**). Keep **`[start]`** only; default Python install phase creates **`/opt/venv`** then **`pip install .`**. [nixpacks.toml](nixpacks.toml) (workers) — **`[phases.install]`** now uses **`"..."`** so default venv steps run before **`pip install -e ./backend`** / **`agents[realtime]`**.
+
 - **Railway / Nixpacks:** backend deploy no longer runs **`python -m em-backend`** (nonexistent module derived from the old **`[project] name`**); use **`Procfile`**, **`python -m em_api`**, and **`name = "em_api"`** ([backend/Procfile](backend/Procfile), [backend/em_api/__main__.py](backend/em_api/__main__.py)).
 
 - **Verifier L2 (Gemini):** transient **HTTP 429 / 503** from the Generative Language API are retried with **exponential backoff** (optional **`GEMINI_MAX_RETRIES`**, **`GEMINI_RETRY_BASE_SEC`** in `.env`) so local E2E verify is less flaky under quota bursts.
