@@ -8,6 +8,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **API:** **`GET /api/v1/catalog/rules`** ([`backend/em_api/routes/catalog.py`](backend/em_api/routes/catalog.py)) — JSON discovery payload: **`openapi_docs`**, **`on_chain_categories`** (from shared **`CATEGORY_TO_UINT`** in [`chain.py`](backend/em_api/services/chain.py)), **`evidence_submit_field_names_by_category`** ([`evidence_schemas.py`](backend/em_api/services/evidence_schemas.py)). Stops **404** for clients that probe this path.
+
+### Fixed
+
+- **API:** **`POST /api/v1/tasks/{task_id}/approve-evidence`** ([`backend/em_api/routes/tasks.py`](backend/em_api/routes/tasks.py)) returns **404** when **`task_id`** matches no Supabase row (instead of PostgREST **`PGRST116`** → **500**) and explains **`tk_…`** vs **`0x…`** wallet misuse.
+
+- **Agents / `workflow_demo`:** [`agents/emagents/workflow_demo/__main__.py`](agents/emagents/workflow_demo/__main__.py) rejects **`--task-id`** values that look like Ethereum addresses (**`0x`** + **40** hex chars) before calling the API, with stderr pointing at the **`tk_`** id from **`--publish-only`**.
+
+- **Agents / `workflow_demo`:** [`agents/emagents/workflow_demo/runner.py`](agents/emagents/workflow_demo/runner.py) — in **`development`**, **`X-PAYMENT-SKIP`** forces legacy **`publishTask`** (ERC-20 **`transferFrom`**); the runner now ensures **MockUSDC allowance** to **EMEscrow** for the publisher wallet (balance check + **`approve`** when needed, fee from **`GET /api/v1/tasks/escrow-fee-bps`**) so **`POST /api/v1/tasks`** no longer reverts with insufficient allowance.
+
+### Added
+
+- **Agents / `workflow_demo`:** [`agents/emagents/workflow_demo/__main__.py`](agents/emagents/workflow_demo/__main__.py) — split modes: **`--publish-only`**, **`--accept-only --task-id …`** (**`--skip-onboard`**), **`--submit-only`** (multipart **`knowledge_access`** evidence), **`--approve-only`**, **`--verify-only`**, **`--approve-verify`**; stderr hints for **`TASK_ID`** / next step; [`runner.py`](agents/emagents/workflow_demo/runner.py) loaders + **`run_publish_only`**, **`run_accept_only`**, **`run_submit_only`**, **`run_approve_only`**, **`run_verify_only`**, **`run_approve_and_verify`**, **`load_verify_display_config`**. [`docs/agent-http-integration.md`](docs/agent-http-integration.md) §4, [`agents/README.md`](agents/README.md).
+
 - **API:** **`GET /api/v1/evidence-files/{evidence_item_id}`** ([`backend/em_api/routes/evidence_files.py`](backend/em_api/routes/evidence_files.py)) streams dev **placeholder** evidence from **`/tmp/em-evidence/{task_id}/{filename}`** so browsers can open uploads ( **`file://`** URLs from the placeholder uploader did not work from the Next.js origin). **`GET /api/v1/tasks/{task_id}`** returns **`evidence_items.id`** and rewrites **`file://`** **`greenfield_url`** values to **`{backend_public_url}/api/v1/evidence-files/{id}`**.
 
 ### Changed

@@ -234,19 +234,21 @@ def task_id_to_bytes32(task_id: str) -> bytes:
     return Web3.keccak(text=task_id)
 
 
+CATEGORY_TO_UINT: dict[str, int] = {
+    "physical_presence": 0,
+    "knowledge_access": 1,
+    "human_authority": 2,
+    "simple_action": 3,
+    "digital_physical": 4,
+    # Frontend-only label until escrow adds enum variant — same uint as DigitalPhysical on-chain.
+    "agent_to_agent": 4,
+}
+
+
 def category_to_uint(category: str) -> int:
-    m = {
-        "physical_presence": 0,
-        "knowledge_access": 1,
-        "human_authority": 2,
-        "simple_action": 3,
-        "digital_physical": 4,
-        # Frontend-only label until escrow adds enum variant — same uint as DigitalPhysical on-chain.
-        "agent_to_agent": 4,
-    }
-    if category not in m:
+    if category not in CATEGORY_TO_UINT:
         raise ValueError(f"unknown category {category}")
-    return m[category]
+    return CATEGORY_TO_UINT[category]
 
 
 def _fill_gas(w3: Web3, tx: dict) -> dict:

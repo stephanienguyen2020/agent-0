@@ -10,10 +10,17 @@ from rich.console import Console
 from rich.live import Live
 from rich.panel import Panel
 
-from emagents.workflow_demo.runner import WorkflowConfig, SharedState, run_workflow
+from emagents.workflow_demo.runner import SharedState, WorkflowConfig
 
 
-def run_interactive(cfg: WorkflowConfig, shared: SharedState, emit: Callable[[dict[str, Any]], None]) -> dict[str, Any]:
+def run_interactive(
+    cfg: WorkflowConfig,
+    shared: SharedState,
+    emit: Callable[[dict[str, Any]], None],
+    *,
+    runner: Callable[[], dict[str, Any]],
+    subtitle: str = "onboard → publish → accept",
+) -> dict[str, Any]:
     """Run workflow in a thread while updating a Rich Live panel."""
     console = Console()
     result: list[Any] = []
@@ -21,7 +28,7 @@ def run_interactive(cfg: WorkflowConfig, shared: SharedState, emit: Callable[[di
 
     def worker() -> None:
         try:
-            result.append(run_workflow(cfg, emit))
+            result.append(runner())
         except Exception as e:
             err.append(str(e))
             shared.last_error = str(e)
@@ -60,7 +67,7 @@ def run_interactive(cfg: WorkflowConfig, shared: SharedState, emit: Callable[[di
                 Panel(
                     "\n".join(lines),
                     title="emagents.workflow_demo",
-                    subtitle="onboard → publish → accept",
+                    subtitle=subtitle,
                     border_style="bright_blue",
                 ),
             )

@@ -51,6 +51,11 @@ _SCHEMAS: dict[str, type[BaseModel]] = {
 }
 
 
+def evidence_submit_field_names_by_category() -> dict[str, list[str]]:
+    """Keys expected in JSON evidence for POST .../submit (per category), for discovery endpoints."""
+    return {cat: list(model.model_fields.keys()) for cat, model in _SCHEMAS.items()}
+
+
 def validate_evidence(category: str, payload: dict[str, Any]) -> None:
     model = _SCHEMAS.get(category)
     if not model:

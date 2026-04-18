@@ -13,6 +13,7 @@ from typing import Any, Literal
 
 import httpx
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
+from postgrest.exceptions import APIError
 from pydantic import BaseModel, Field
 from web3 import Web3
 from web3.exceptions import ContractLogicError
@@ -772,7 +773,19 @@ def approve_task_evidence(task_id: str, body: TaskApproveEvidenceBody) -> dict:
     if not settings.requester_approval_before_verify:
         raise HTTPException(409, "requester approval gate is disabled (REQUESTER_APPROVAL_BEFORE_VERIFY=false)")
 
-    tr = supa.table("tasks").select("*").eq("task_id", task_id).single().execute()
+    try:
+        tr = supa.table("tasks").select("*").eq("task_id", task_id).single().execute()
+    except APIError as e:
+        if getattr(e, "code", None) == "PGRST116":
+            logger.warning(
+                "approve-evidence task lookup 0 rows for task_id prefix=%s",
+                (task_id[:16] + "…") if task_id and len(task_id) > 16 else task_id,
+            )
+            raise HTTPException(
+                404,
+                "task not found — use the publish task id (tk_…), not a wallet address (0x…).",
+            ) from e
+        raise
     if not tr.data:
         raise HTTPException(404, "task not found")
     task = tr.data
