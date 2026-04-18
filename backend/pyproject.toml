@@ -1,7 +1,7 @@
 [project]
 name = "em-backend"
 version = "0.1.0"
-description = "Execution Market FastAPI backend"
+description = "Agent Zero FastAPI backend"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

@@ -6,7 +6,7 @@ import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 /// @title MockUSDC with EIP-3009 for x402
-/// @notice Test USDC for Execution Market. Implements EIP-3009 transferWithAuthorization
+/// @notice Test USDC for Agent Zero. Implements EIP-3009 transferWithAuthorization
 ///         so the x402 facilitator can settle payments gaslessly on behalf of agents.
 contract MockUSDC is ERC20, EIP712 {
     bytes32 public constant TRANSFER_WITH_AUTHORIZATION_TYPEHASH = keccak256(

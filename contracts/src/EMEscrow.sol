@@ -7,7 +7,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
-/// @title Execution Market — Task Escrow
+/// @title Agent Zero — Task Escrow
 /// @notice Holds USDC bounty + fee for each task; releases on verification.
 contract EMEscrow is AccessControl, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;

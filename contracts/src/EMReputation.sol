@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
-/// @title Execution Market — Reputation Registry
+/// @title Agent Zero — Reputation Registry
 contract EMReputation is AccessControl {
     bytes32 public constant EM_AGENT_ROLE = keccak256("EM_AGENT_ROLE");
 

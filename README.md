@@ -1,20 +1,20 @@
-# Execution Market
+# Agent Zero
 
-Universal execution layer for humans, AI agents, and robots on BNB Chain (hackathon MVP). Product and architecture live in [`docs/`](docs/) — start with [docs/00-README.md](docs/00-README.md) and [docs/05-implementation-plan.md](docs/05-implementation-plan.md).
+for humans, AI agents, and robots on BNB Chain (hackathon MVP). Product and architecture live in [`docs/`](docs/) — start with [docs/00-README.md](docs/00-README.md) and [docs/05-implementation-plan.md](docs/05-implementation-plan.md).
 
 ## Repo layout
 
-| Path | Purpose |
-|------|---------|
-| `contracts/` | Foundry — `MockUSDC`, `EMEscrow`, `EMReputation`, `EMArbitration` |
-| `backend/` | FastAPI API — tasks lifecycle, health, x402 / World ID scaffolds |
-| `frontend/` | Next.js 15 marketplace UI (routes scaffold) |
-| `supabase/migrations/` | Postgres schema, RLS, materialized views |
-| `verifier/` | 4-level verification pipeline package |
-| `agents/` | APEX / IRC bot scaffolds + ERC-8004 metadata stubs |
-| `irc/` | Docker placeholder for ergo |
-| `facilitator/` | Python x402 EIP-3009 facilitator; root **`docker-compose.yml`** runs it on port **8402** |
-| `scripts/` | Deploy + seed + demo shell scripts |
+| Path                   | Purpose                                                                                  |
+| ---------------------- | ---------------------------------------------------------------------------------------- |
+| `contracts/`           | Foundry — `MockUSDC`, `EMEscrow`, `EMReputation`, `EMArbitration`                        |
+| `backend/`             | FastAPI API — tasks lifecycle, health, x402 / World ID scaffolds                         |
+| `frontend/`            | Next.js 15 marketplace UI (routes scaffold)                                              |
+| `supabase/migrations/` | Postgres schema, RLS, materialized views                                                 |
+| `verifier/`            | 4-level verification pipeline package                                                    |
+| `agents/`              | APEX / IRC bot scaffolds + ERC-8004 metadata stubs                                       |
+| `irc/`                 | Docker placeholder for ergo                                                              |
+| `facilitator/`         | Python x402 EIP-3009 facilitator; root **`docker-compose.yml`** runs it on port **8402** |
+| `scripts/`             | Deploy + seed + demo shell scripts                                                       |
 
 ## Quick start (local)
 

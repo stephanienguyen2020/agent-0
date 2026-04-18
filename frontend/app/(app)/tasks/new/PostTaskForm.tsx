@@ -72,7 +72,7 @@ export function PostTaskForm() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [result, setResult] = useState<{ task_id: string; tx?: string } | null>(null);
-  const [escrowFeeBps, setEscrowFeeBps] = useState(ESCROW_FEE_BPS);
+  const [escrowFeeBps, setEscrowFeeBps] = useState<number>(ESCROW_FEE_BPS);
 
   useEffect(() => {
     getEscrowFeeBps().then(setEscrowFeeBps).catch(() => {});

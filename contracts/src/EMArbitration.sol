@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
-/// @title Execution Market — Tiered Arbitration (SCAFFOLD)
+/// @title Agent Zero — Tiered Arbitration (SCAFFOLD)
 contract EMArbitration is AccessControl {
     bytes32 public constant EM_AGENT_ROLE = keccak256("EM_AGENT_ROLE");
 

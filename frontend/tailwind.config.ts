@@ -25,6 +25,7 @@ const config: Config = {
       },
       fontFamily: {
         sans: ["var(--font-manrope)", "system-ui", "sans-serif"],
+        serif: ["var(--font-instrument-serif)", "Georgia", "serif"],
         mono: ["var(--font-jetbrains)", "ui-monospace", "monospace"],
       },
       borderRadius: {
