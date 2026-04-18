@@ -50,7 +50,9 @@ function tabFilter(tab: TabId, status: string) {
   const s = status.toLowerCase();
   if (tab === "all") return true;
   if (tab === "published") return s === "published";
-  if (tab === "in_progress") return ["in_progress", "accepted", "submitted", "verifying"].includes(s);
+  if (tab === "in_progress") {
+    return ["in_progress", "accepted", "submitted", "awaiting_requester_review", "verifying"].includes(s);
+  }
   if (tab === "completed") return s === "completed";
   if (tab === "disputed") return s === "disputed";
   return true;
@@ -60,7 +62,9 @@ function statusColor(status: string): string {
   const s = status.toLowerCase();
   if (s === "completed") return "var(--accent)";
   if (s === "disputed") return "var(--danger)";
-  if (["in_progress", "accepted", "submitted", "verifying"].includes(s)) return "oklch(0.82 0.09 240)";
+  if (["in_progress", "accepted", "submitted", "awaiting_requester_review", "verifying"].includes(s)) {
+    return "oklch(0.82 0.09 240)";
+  }
   return "var(--mute)";
 }
 
@@ -157,7 +161,9 @@ export function MyTasksTable({ tasks }: { tasks: TaskRow[] }) {
       if (s === "published") c.published += 1;
       if (s === "completed") c.completed += 1;
       if (s === "disputed") c.disputed += 1;
-      if (["in_progress", "accepted", "submitted", "verifying"].includes(s)) c.in_progress += 1;
+      if (["in_progress", "accepted", "submitted", "awaiting_requester_review", "verifying"].includes(s)) {
+        c.in_progress += 1;
+      }
     }
     return c;
   }, [tasks]);

@@ -11,7 +11,7 @@ import { useAccount } from "wagmi";
 
 import { usePrivyConfigured } from "@/app/providers";
 import { BtnPrimary } from "@/components/ui/Button";
-import { getApiBase } from "@/lib/api-base";
+import { fetchWorldIdStatus, postWorldIdVerify } from "@/lib/api";
 
 function shortAddr(a: string) {
   if (a.length < 14) return a;
@@ -63,16 +63,7 @@ function RegisterFlowInner() {
 
   const { data: statusData } = useQuery({
     queryKey: ["world-id-status", normalizedWallet],
-    queryFn: async () => {
-      const api = getApiBase();
-      const r = await fetch(
-        `${api}/api/v1/world-id/status?wallet=${encodeURIComponent(normalizedWallet!)}`,
-      );
-      if (!r.ok) throw new Error(await r.text());
-      return r.json() as Promise<{
-        verification_level: "device" | "orb" | null;
-      }>;
-    },
+    queryFn: async () => fetchWorldIdStatus(normalizedWallet!),
     enabled: Boolean(authenticated && normalizedWallet),
   });
 
@@ -162,16 +153,7 @@ function RegisterFlowInner() {
         setErr("Invalid wallet address for World ID signal.");
         return;
       }
-      const api = getApiBase();
-      const r = await fetch(`${api}/api/v1/world-id/verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wallet: normalized, idkit_result: result }),
-      });
-      if (!r.ok) {
-        const t = await r.text();
-        throw new Error(t || r.statusText);
-      }
+      await postWorldIdVerify({ wallet: normalized, idkit_result: result });
       setOk(
         "Verified — you can accept tasks (Orb required for high bounties).",
       );

@@ -23,4 +23,10 @@ export type TaskApiRecord = {
   on_chain_tx_verify?: string | null;
   on_chain_tx_release?: string | null;
   on_chain_tx_refund?: string | null;
+  /** Joined from `agents` via `agent_id` (GET task single). */
+  requester_wallet?: string | null;
+  /** Joined from `executors` via `executor_id`. */
+  executor_wallet?: string | null;
+  /** Mirrors server `REQUESTER_APPROVAL_BEFORE_VERIFY`. */
+  requester_approval_before_verify?: boolean;
 };

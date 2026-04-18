@@ -64,6 +64,9 @@ export default async function TaskDetailPage({ params }: { params: Promise<{ id:
             task_id: String(task.task_id),
             status,
             title: task.title != null ? String(task.title) : undefined,
+            requester_wallet: task.requester_wallet != null ? String(task.requester_wallet) : undefined,
+            executor_wallet: task.executor_wallet != null ? String(task.executor_wallet) : undefined,
+            requester_approval_before_verify: task.requester_approval_before_verify,
           }}
         />
       </div>

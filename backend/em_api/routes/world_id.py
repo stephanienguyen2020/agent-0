@@ -56,10 +56,16 @@ def world_id_status(wallet: str) -> dict[str, Any]:
     if not w:
         raise HTTPException(422, "wallet is required")
     r = supa.table("world_id_proofs").select("verification_level").eq("wallet", w).limit(1).execute()
+    base: dict[str, Any] = {
+        "orb_bounty_threshold_micros": settings.world_id_orb_bounty_threshold_micros,
+        "world_id_accept_enforce": settings.world_id_accept_enforce,
+    }
     if not r.data:
-        return {"verification_level": None}
+        base["verification_level"] = None
+        return base
     lvl = r.data[0].get("verification_level")
-    return {"verification_level": lvl}
+    base["verification_level"] = lvl
+    return base
 
 
 @router.post("/verify")

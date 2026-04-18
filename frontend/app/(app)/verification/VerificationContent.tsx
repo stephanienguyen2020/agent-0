@@ -9,15 +9,17 @@ import { useAccount } from "wagmi";
 
 import { usePrivyConfigured } from "@/app/providers";
 import { BtnPrimary } from "@/components/ui/Button";
-import { getApiBase } from "@/lib/api-base";
+import { fetchWorldIdStatus } from "@/lib/api";
 
-/** Default matches backend `WORLD_ID_ORB_BOUNTY_THRESHOLD_MICROS` / 1e6 ($5 USDC). */
-const ORB_BOUNTY_THRESHOLD_USD = 5;
+/** Fallback when API omits `orb_bounty_threshold_micros` (matches default backend settings). */
+const DEFAULT_ORB_BOUNTY_THRESHOLD_USD = 5;
 
 function EligibilityRows({
   level,
+  orbBountyThresholdLabel,
 }: {
   level: "device" | "orb" | null;
+  orbBountyThresholdLabel: string;
 }) {
   const rows: {
     label: string;
@@ -32,7 +34,7 @@ function EligibilityRows({
       ok: level === "device" || level === "orb",
     },
     {
-      label: `Accept tasks with bounty ≥ $${ORB_BOUNTY_THRESHOLD_USD} USDC (requires Orb)`,
+      label: `Accept tasks with bounty ≥ $${orbBountyThresholdLabel} USDC (requires Orb)`,
       ok: level === "orb",
     },
   ];
@@ -78,23 +80,27 @@ function VerificationInner() {
     error,
   } = useQuery({
     queryKey: ["world-id-status", normalizedWallet],
-    queryFn: async () => {
-      const api = getApiBase();
-      const r = await fetch(
-        `${api}/api/v1/world-id/status?wallet=${encodeURIComponent(normalizedWallet!)}`,
-      );
-      if (!r.ok) {
-        const t = await r.text();
-        throw new Error(t || r.statusText);
-      }
-      return r.json() as Promise<{
-        verification_level: "device" | "orb" | null;
-      }>;
-    },
+    queryFn: async () => fetchWorldIdStatus(normalizedWallet!),
+    staleTime: 0,
     enabled: Boolean(authenticated && normalizedWallet),
   });
 
   const level = statusData?.verification_level ?? null;
+
+  const orbBountyThresholdUsd = useMemo(() => {
+    const m = statusData?.orb_bounty_threshold_micros;
+    if (typeof m === "number" && m >= 0) return m / 1_000_000;
+    return DEFAULT_ORB_BOUNTY_THRESHOLD_USD;
+  }, [statusData?.orb_bounty_threshold_micros]);
+
+  const orbBountyThresholdLabel = useMemo(
+    () =>
+      new Intl.NumberFormat("en-US", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      }).format(orbBountyThresholdUsd),
+    [orbBountyThresholdUsd],
+  );
 
   if (!authenticated) {
     return (
@@ -168,8 +174,8 @@ function VerificationInner() {
           <div className="rounded-[14px] border border-sky-500/30 bg-sky-500/10 px-4 py-4">
             <p className="text-sm font-medium text-sky-100">Verified at Device level</p>
             <p className="mt-2 text-sm leading-relaxed text-sky-100/90">
-              You can accept tasks that do not require Orb. For bounties at or above $
-              {ORB_BOUNTY_THRESHOLD_USD} USDC, Orb verification is required—upgrade on Register.
+              You can accept tasks that do not require Orb.               For bounties at or above $
+              {orbBountyThresholdLabel} USDC, Orb verification is required—upgrade on Register.
             </p>
           </div>
         )}
@@ -189,7 +195,7 @@ function VerificationInner() {
           Task eligibility (summary)
         </h3>
         <CardSection>
-          <EligibilityRows level={level} />
+          <EligibilityRows level={level} orbBountyThresholdLabel={orbBountyThresholdLabel} />
         </CardSection>
       </div>
 

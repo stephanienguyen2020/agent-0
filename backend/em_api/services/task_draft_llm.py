@@ -130,6 +130,29 @@ def parse_deadline(raw: Any, *, now: datetime) -> datetime | None:
         return None
 
 
+# Assistant path: Gemini often omits `title` on confirmation turns; derive a short headline from instructions.
+_INFERRED_TITLE_MAX_LEN = 120
+
+
+def apply_inferred_task_title(draft: dict[str, Any]) -> dict[str, Any]:
+    """
+    Shallow copy of draft with `title` set from the first line of `instructions` when title is missing/blank.
+    Used by assistant-chat only; draft-chat remains strict unless the caller opts in.
+    """
+    out = dict(draft)
+    t = out.get("title")
+    if isinstance(t, str) and t.strip():
+        return out
+    instr = out.get("instructions")
+    if not isinstance(instr, str) or not instr.strip():
+        return out
+    line = instr.strip().split("\n", 1)[0].strip()
+    if len(line) > _INFERRED_TITLE_MAX_LEN:
+        line = line[: _INFERRED_TITLE_MAX_LEN - 1].rstrip() + "…"
+    out["title"] = line
+    return out
+
+
 def validate_task_draft_dict(
     draft: dict[str, Any],
     *,

@@ -16,6 +16,8 @@ function firstIncompleteIndex(status: string): number | "all" {
     accepted: 2,
     in_progress: 3,
     submitted: 4,
+    /** Evidence in; requester must approve before verify when gate is on. */
+    awaiting_requester_review: 4,
     verifying: 5,
     verified: 5,
   };

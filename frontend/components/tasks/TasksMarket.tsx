@@ -13,6 +13,8 @@ export type TaskRow = {
   bounty_micros?: string | number;
   instructions?: string;
   updated_at?: string | null;
+  created_at?: string | null;
+  deadline_at?: string | null;
   on_chain_tx_release?: string | null;
   on_chain_tx_publish?: string | null;
 };
@@ -35,6 +37,13 @@ function formatBounty(micros: string | number | undefined) {
   const n = typeof micros === "string" ? Number(micros) : micros;
   if (Number.isNaN(n)) return String(micros);
   return (n / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+function formatIsoDateTime(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
 function totalPool(tasks: TaskRow[]) {
@@ -63,6 +72,41 @@ const STATUS_SORT_RANK: Record<string, number> = {
 
 function statusSortRank(status: string) {
   return STATUS_SORT_RANK[status.toLowerCase()] ?? 50;
+}
+
+export type MarketStatusFilter = "all" | "published" | "accepted" | "review" | "disputed";
+
+const STATUS_FILTER_PRESETS: { id: MarketStatusFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "published", label: "Published" },
+  { id: "accepted", label: "Accepted" },
+  { id: "review", label: "Review" },
+  { id: "disputed", label: "Disputed" },
+];
+
+function matchesStatusFilter(task: TaskRow, f: MarketStatusFilter): boolean {
+  if (f === "all") return true;
+  const s = String(task.status ?? "").toLowerCase();
+  if (f === "review") return s === "awaiting_requester_review";
+  return s === f;
+}
+
+function marketResultsTitle(cat: string, statusFilter: MarketStatusFilter): string {
+  const stPart =
+    statusFilter === "all"
+      ? null
+      : statusFilter === "review"
+        ? "Awaiting review"
+        : statusFilter === "published"
+          ? "Published"
+          : statusFilter === "accepted"
+            ? "Accepted"
+            : "Disputed";
+
+  if (cat === "all" && statusFilter === "all") return "All open tasks";
+  if (statusFilter !== "all" && cat === "all") return `${stPart} tasks`;
+  if (statusFilter === "all") return formatCategoryLabel(cat);
+  return `${stPart} · ${formatCategoryLabel(cat)}`;
 }
 
 /* ── Category badge ── */
@@ -171,6 +215,7 @@ function TaskRowItem({ task, onOpen }: { task: TaskRow; onOpen: (t: TaskRow) => 
   const bounty = formatBounty(task.bounty_micros);
   const ref = taskCatalogRef(task.task_id);
   const s = task.status.toLowerCase();
+  const showAcceptListCta = s === "published";
   const refLineColor = s === "disputed" ? "var(--danger)" : "var(--mute)";
 
   return (
@@ -232,9 +277,13 @@ function TaskRowItem({ task, onOpen }: { task: TaskRow; onOpen: (t: TaskRow) => 
         href={`/tasks/${task.task_id}`}
         onClick={(e) => e.stopPropagation()}
         className="dashboard-btn inline-flex w-full items-center justify-center gap-1.5 rounded-full px-4 py-2.5 text-[13px] font-semibold"
-        style={{ background: "var(--accent)", color: "var(--bg)", border: "1px solid var(--accent)" }}
+        style={
+          showAcceptListCta
+            ? { background: "var(--accent)", color: "var(--bg)", border: "1px solid var(--accent)" }
+            : { background: "var(--card)", color: "var(--ink)", border: "1px solid var(--line)" }
+        }
       >
-        Accept <span className="arrow">→</span>
+        {showAcceptListCta ? "Accept" : "View details"} <span className="arrow">→</span>
       </Link>
     </div>
   );
@@ -282,11 +331,26 @@ function StatStrip({ tasks }: { tasks: TaskRow[] }) {
 
 /* ── Filter bar ── */
 function FilterBar({
-  q, setQ, cat, setCat, sort, setSort, view, setView, categories,
+  q,
+  setQ,
+  cat,
+  setCat,
+  statusFilter,
+  setStatusFilter,
+  sort,
+  setSort,
+  view,
+  setView,
+  categories,
 }: {
-  q: string; setQ: (v: string) => void;
-  cat: string; setCat: (v: string) => void;
-  sort: string; setSort: (v: string) => void;
+  q: string;
+  setQ: (v: string) => void;
+  cat: string;
+  setCat: (v: string) => void;
+  statusFilter: MarketStatusFilter;
+  setStatusFilter: (v: MarketStatusFilter) => void;
+  sort: string;
+  setSort: (v: string) => void;
   view: "grid" | "list";
   setView: (v: "grid" | "list") => void;
   categories: string[];
@@ -353,6 +417,27 @@ function FilterBar({
         })}
       </div>
 
+      {/* Status filters */}
+      <div className="flex w-full min-w-0 flex-wrap items-center gap-1.5">
+        <span className="az-mono text-[10.5px] uppercase" style={{ color: "var(--mute)", letterSpacing: "0.12em" }}>
+          Status
+        </span>
+        {STATUS_FILTER_PRESETS.map(({ id, label }) => {
+          const on = statusFilter === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setStatusFilter(id)}
+              className="dashboard-btn capitalize"
+              style={on ? pillOn : pillBase}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Pushes sort + view to the right on wide screens; omitted on stacked mobile layout */}
         <div className="hidden min-w-[10px] sm:block" style={{ flex: "1 1 0%" }} aria-hidden />
 
@@ -404,6 +489,10 @@ function Drawer({ task, onClose }: { task: TaskRow | null; onClose: () => void }
   if (!task) return null;
   const { hue, glyph } = catMeta(task.category);
   const bounty = formatBounty(task.bounty_micros);
+  const statusLower = String(task.status ?? "").toLowerCase();
+  const showAcceptCta = statusLower === "published";
+  const deadlineLabel = formatIsoDateTime(task.deadline_at ?? undefined);
+  const updatedLabel = formatIsoDateTime(task.updated_at ?? undefined);
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 80 }}>
       <div
@@ -459,6 +548,36 @@ function Drawer({ task, onClose }: { task: TaskRow | null; onClose: () => void }
             {task.instructions || "No description provided."}
           </p>
 
+          <dl
+            className="mt-5 space-y-2 rounded-[12px] p-4 text-[13px] leading-snug"
+            style={{ border: "1px solid var(--line)", background: "color-mix(in oklab, var(--card) 88%, transparent)" }}
+          >
+            <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-3">
+              <dt className="az-mono shrink-0 text-[10px] uppercase" style={{ color: "var(--mute)", letterSpacing: "0.12em" }}>
+                Task ID
+              </dt>
+              <dd className="min-w-0 break-all font-mono text-[12px]" style={{ color: "var(--ink-2)" }}>
+                {task.task_id}
+              </dd>
+            </div>
+            {deadlineLabel ? (
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-3">
+                <dt className="az-mono shrink-0 text-[10px] uppercase" style={{ color: "var(--mute)", letterSpacing: "0.12em" }}>
+                  Deadline
+                </dt>
+                <dd style={{ color: "var(--ink)" }}>{deadlineLabel}</dd>
+              </div>
+            ) : null}
+            {updatedLabel ? (
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-3">
+                <dt className="az-mono shrink-0 text-[10px] uppercase" style={{ color: "var(--mute)", letterSpacing: "0.12em" }}>
+                  Updated
+                </dt>
+                <dd style={{ color: "var(--ink-2)" }}>{updatedLabel}</dd>
+              </div>
+            ) : null}
+          </dl>
+
           <div
             className="mt-6 grid gap-3.5 rounded-[12px] p-5"
             style={{ gridTemplateColumns: "1fr 1fr", border: "1px solid var(--line)", background: "var(--card)" }}
@@ -486,9 +605,25 @@ function Drawer({ task, onClose }: { task: TaskRow | null; onClose: () => void }
             <Link
               href={`/tasks/${task.task_id}`}
               className="dashboard-btn flex-1 rounded-full py-3.5 text-center text-[14px] font-semibold"
-              style={{ background: "var(--accent)", color: "var(--bg)", border: "1px solid var(--accent)" }}
+              style={
+                showAcceptCta
+                  ? { background: "var(--accent)", color: "var(--bg)", border: "1px solid var(--accent)" }
+                  : {
+                      background: "var(--card)",
+                      color: "var(--ink)",
+                      border: "1px solid var(--line)",
+                    }
+              }
             >
-              Accept — lock escrow <span className="arrow">→</span>
+              {showAcceptCta ? (
+                <>
+                  Accept — lock escrow <span className="arrow">→</span>
+                </>
+              ) : (
+                <>
+                  View task details <span className="arrow">→</span>
+                </>
+              )}
             </Link>
             <button
               onClick={onClose}
@@ -508,6 +643,7 @@ function Drawer({ task, onClose }: { task: TaskRow | null; onClose: () => void }
 export function TasksMarket({ tasks }: { tasks: TaskRow[] }) {
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<MarketStatusFilter>("all");
   const [sort, setSort] = useState("bounty");
   const [view, setView] = useState<"grid" | "list">("grid");
   const [openTask, setOpenTask] = useState<TaskRow | null>(null);
@@ -525,7 +661,8 @@ export function TasksMarket({ tasks }: { tasks: TaskRow[] }) {
         t.title.toLowerCase().includes(q.toLowerCase()) ||
         String(t.task_id).toLowerCase().includes(q.toLowerCase());
       const matchC = cat === "all" || t.category === cat;
-      return matchQ && matchC;
+      const matchS = matchesStatusFilter(t, statusFilter);
+      return matchQ && matchC && matchS;
     });
     if (sort === "bounty") {
       arr = [...arr].sort((a, b) => Number(b.bounty_micros ?? 0) - Number(a.bounty_micros ?? 0));
@@ -535,7 +672,7 @@ export function TasksMarket({ tasks }: { tasks: TaskRow[] }) {
       arr = [...arr].reverse();
     }
     return arr;
-  }, [tasks, q, cat, sort]);
+  }, [tasks, q, cat, statusFilter, sort]);
 
   const pool = totalPool(filtered);
 
@@ -544,8 +681,16 @@ export function TasksMarket({ tasks }: { tasks: TaskRow[] }) {
       <StatStrip tasks={tasks} />
 
       <FilterBar
-        q={q} setQ={setQ} cat={cat} setCat={setCat}
-        sort={sort} setSort={setSort} view={view} setView={setView}
+        q={q}
+        setQ={setQ}
+        cat={cat}
+        setCat={setCat}
+        statusFilter={statusFilter}
+        setStatusFilter={setStatusFilter}
+        sort={sort}
+        setSort={setSort}
+        view={view}
+        setView={setView}
         categories={categories}
       />
 
@@ -556,7 +701,7 @@ export function TasksMarket({ tasks }: { tasks: TaskRow[] }) {
       >
         <div className="min-w-0">
           <div className="font-serif text-[22px] leading-tight sm:text-[26px]" style={{ color: "var(--ink)" }}>
-            {cat === "all" ? "All open tasks" : formatCategoryLabel(cat)}
+            {marketResultsTitle(cat, statusFilter)}
           </div>
           <div className="az-mono mt-1 text-[10.5px] sm:text-[11px]" style={{ color: "var(--mute)" }}>
             {filtered.length} tasks · pool{" "}

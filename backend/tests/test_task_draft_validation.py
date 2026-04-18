@@ -2,7 +2,11 @@
 
 from datetime import datetime, timedelta, timezone
 
-from em_api.services.task_draft_llm import normalize_category, validate_task_draft_dict
+from em_api.services.task_draft_llm import (
+    apply_inferred_task_title,
+    normalize_category,
+    validate_task_draft_dict,
+)
 
 
 def test_validate_simple_action_ok():
@@ -65,6 +69,44 @@ def test_normalize_category_synonyms():
     assert normalize_category("Physical presence") == "physical_presence"
     assert normalize_category("knowledge") == "knowledge_access"
     assert normalize_category("bad_xyz") is None
+
+
+def test_apply_inferred_title_from_instructions_passes_validation():
+    """Assistant-chat often omits title; infer first line of instructions."""
+    fixed = datetime(2030, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+    raw = {
+        "instructions": "Take a picture of a Smart water bottle at the venue.",
+        "category": "simple_action",
+        "bounty_usdc": 1,
+    }
+    out, err = validate_task_draft_dict(apply_inferred_task_title(raw), now=fixed)
+    assert err is None
+    assert out is not None
+    assert out["title"] == "Take a picture of a Smart water bottle at the venue."
+
+
+def test_apply_inferred_title_truncates_long_first_line():
+    fixed = datetime(2030, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+    long_line = "x" * 150
+    raw = {"instructions": long_line, "category": "simple_action", "bounty_usdc": 1}
+    out, err = validate_task_draft_dict(apply_inferred_task_title(raw), now=fixed)
+    assert err is None
+    assert out is not None
+    assert len(out["title"]) <= 120
+    assert out["title"].endswith("…")
+
+
+def test_apply_inferred_title_preserves_explicit_title():
+    fixed = datetime(2030, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+    raw = {
+        "title": "Short headline",
+        "instructions": "Long instructions that would otherwise be used",
+        "category": "simple_action",
+        "bounty_usdc": 1,
+    }
+    out, err = validate_task_draft_dict(apply_inferred_task_title(raw), now=fixed)
+    assert err is None
+    assert out["title"] == "Short headline"
 
 
 def test_deadline_defaults_when_omitted():

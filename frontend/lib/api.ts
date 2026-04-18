@@ -218,6 +218,8 @@ export type AssistantChatResponse = {
   needs_clarification?: boolean;
   draft: TaskDraftFromApi | null;
   pending_actions?: PendingAction[];
+  /** Set when the model returned a draft object that still failed server validation (e.g. invalid_bounty). */
+  draft_validation_error?: string;
 };
 
 export async function postDraftChat(messages: ChatMessage[]): Promise<DraftChatResponse> {
@@ -262,4 +264,86 @@ export async function fetchWalletEscrowLocked(wallet: string): Promise<{
     throw new Error(parseFastApiDetail(text) || `${r.status} ${r.statusText}`);
   }
   return JSON.parse(text) as { wallet: string; locked_micros: string; task_count: number };
+}
+
+export type WorldIdVerificationLevel = "device" | "orb";
+
+export type WorldIdStatusResponse = {
+  verification_level: WorldIdVerificationLevel | null;
+  orb_bounty_threshold_micros?: number;
+  world_id_accept_enforce?: boolean;
+};
+
+export async function fetchWorldIdStatus(wallet: string): Promise<WorldIdStatusResponse> {
+  const params = new URLSearchParams();
+  params.set("wallet", wallet);
+  const r = await fetch(`${getApiBase()}/api/v1/world-id/status?${params}`, {
+    cache: "no-store",
+  });
+  const text = await r.text();
+  if (!r.ok) {
+    throw new Error(parseFastApiDetail(text) || `${r.status} ${r.statusText}`);
+  }
+  return JSON.parse(text) as WorldIdStatusResponse;
+}
+
+export async function postWorldIdVerify(body: {
+  wallet: string;
+  /** IDKit proof payload — typed loosely so `IDKitResult` variants serialize as JSON objects. */
+  idkit_result: unknown;
+}): Promise<Record<string, unknown>> {
+  const r = await fetch(`${getApiBase()}/api/v1/world-id/verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const text = await r.text();
+  if (!r.ok) {
+    throw new Error(parseFastApiDetail(text) || `${r.status} ${r.statusText}`);
+  }
+  return JSON.parse(text) as Record<string, unknown>;
+}
+
+export type DashboardVolumeRange = "24h" | "7d" | "30d" | "all";
+
+export type DashboardOverview = {
+  kpis: {
+    tasks_completed: number;
+    tasks_completed_delta_pct: number | null;
+    active_executors: number;
+    active_executors_delta_pct: number | null;
+    avg_completion_minutes: number | null;
+    avg_completion_delta_pct: number | null;
+    usdc_volume_24h_micros: string;
+    usdc_volume_24h_delta_pct: number | null;
+  };
+  task_volume: { date: string; label: string; count: number }[];
+  volume_range: DashboardVolumeRange;
+  category_distribution: { category: string; label: string; count: number; pct: number }[];
+  recent_settlements: {
+    task_id: string;
+    title: string;
+    settled_at: string | null;
+    bounty_micros: string;
+    category: string | null;
+  }[];
+  executors_highlight: {
+    display_name: string;
+    type: string | null;
+    type_display: string;
+    wallet: string;
+  }[];
+};
+
+export async function fetchDashboardOverview(opts?: {
+  volumeRange?: DashboardVolumeRange;
+}): Promise<DashboardOverview> {
+  const params = new URLSearchParams();
+  params.set("volume_range", opts?.volumeRange ?? "7d");
+  const r = await fetch(`${getApiBase()}/api/v1/dashboard/overview?${params}`, { cache: "no-store" });
+  const text = await r.text();
+  if (!r.ok) {
+    throw new Error(parseFastApiDetail(text) || `${r.status} ${r.statusText}`);
+  }
+  return JSON.parse(text) as DashboardOverview;
 }

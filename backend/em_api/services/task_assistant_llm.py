@@ -18,6 +18,7 @@ from em_api.services.task_draft_llm import (
     _generate_content_endpoint,
     _parse_json_object,
     _ssl_context_for_outbound_https,
+    apply_inferred_task_title,
     validate_task_draft_dict,
 )
 
@@ -416,7 +417,9 @@ def assistant_chat_turn(
         "- get_task: arguments {task_id}\n"
         "- list_my_tasks: arguments {limit?: number}\n"
         "When they want to create a market task, fill draft (categories: physical_presence, knowledge_access, "
-        "human_authority, agent_to_agent, simple_action) with bounty_usdc, instructions, etc.\n"
+        "human_authority, agent_to_agent, simple_action) with bounty_usdc, instructions, title, etc.\n"
+        "Every draft MUST include a non-empty string field `title` (short headline), including when the user only "
+        "says yes/ok/proceed — same full draft object as the first proposal, never omit title.\n"
         "When the user confirms task creation (e.g. yes, ok, proceed), you MUST include the complete draft object "
         "in JSON — same shape as when first proposing the task — not prose-only; never ask them to review details "
         "without including draft. For physical_presence, draft MUST include location_lat and location_lng "
@@ -465,7 +468,7 @@ def assistant_chat_turn(
             "For acceptance, executor, or who accepted, base the answer on get_task results (executor_wallet, status); "
             "do not ask the user for a task id if these results or the opening Recent tasks block already identify the task. "
             "If they were creating or confirming a task, include the full draft object when the task is ready for "
-            "review or publish (same fields as draft-chat); only use draft null when this turn is not about "
+            "review or publish (same fields as draft-chat), including non-empty title; only use draft null when this turn is not about "
             "task creation. Include pending_actions only if user intent matches. "
             "Return ONLY JSON with keys assistant_message, needs_clarification, draft, pending_actions."
         )
@@ -475,7 +478,7 @@ def assistant_chat_turn(
             + "\nSummarize tool results; output JSON only with keys assistant_message, needs_clarification, draft, pending_actions. "
             "Include tk_… when naming a concrete task. For executor/acceptance questions, use get_task fields from the tool JSON; "
             "never ask the user for a task id when the Recent tasks block above or tool results already supply it. "
-            "If the user was creating a task, include the full draft when applicable."
+            "If the user was creating a task, include the full draft when applicable, with a non-empty title string."
         )
         parsed = _gemini_json_response(
             system_instruction=summarizer_si,
@@ -490,22 +493,28 @@ def assistant_chat_turn(
     needs_clarification = bool(parsed.get("needs_clarification", False))
 
     draft_out: dict[str, Any] | None = None
+    draft_validation_error: str | None = None
     raw_draft = parsed.get("draft")
     if isinstance(raw_draft, dict):
-        vd, err = validate_task_draft_dict(raw_draft)
+        normalized = apply_inferred_task_title(raw_draft)
+        vd, err = validate_task_draft_dict(normalized)
         if vd is not None:
             draft_out = vd
         elif err:
-            logger.warning("assistant draft validation failed: %s", err)
+            draft_validation_error = err
+            logger.info("assistant draft validation failed: %s", err)
 
     pending_raw = parsed.get("pending_actions")
     pending_list: list[dict[str, Any]] = []
     if isinstance(pending_raw, list):
         pending_list = _filter_pending_actions(supa, wallet, [x for x in pending_raw if isinstance(x, dict)])
 
-    return {
+    out: dict[str, Any] = {
         "assistant_message": assistant_message.strip()[:12000],
         "needs_clarification": needs_clarification,
         "draft": draft_out,
         "pending_actions": pending_list,
     }
+    if draft_validation_error is not None:
+        out["draft_validation_error"] = draft_validation_error
+    return out

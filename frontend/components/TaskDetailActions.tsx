@@ -3,16 +3,21 @@
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { useRouter } from "next/navigation";
 import { useCallback, useId, useState, type FormEvent } from "react";
+import { getAddress } from "viem";
 import { useAccount } from "wagmi";
 
 import { usePrivyConfigured } from "@/app/providers";
 import { Card } from "@/components/ui/Card";
+import { parseFastApiDetail } from "@/lib/api";
 import { getApiBase } from "@/lib/api-base";
 
 type TaskRow = {
   task_id: string;
   status: string;
   title?: string;
+  requester_wallet?: string;
+  executor_wallet?: string;
+  requester_approval_before_verify?: boolean;
 };
 
 const primaryBtn =
@@ -32,6 +37,15 @@ const TERMINAL_STATUSES = new Set([
   "cancelled",
   "refunded",
 ]);
+
+function walletsEqual(a: string | undefined, b: string | undefined): boolean {
+  if (!a || !b) return false;
+  try {
+    return getAddress(a) === getAddress(b);
+  } catch {
+    return a.toLowerCase() === b.toLowerCase();
+  }
+}
 
 function TaskDetailActionsInner({ task }: { task: TaskRow }) {
   const router = useRouter();
@@ -73,8 +87,21 @@ function TaskDetailActionsInner({ task }: { task: TaskRow }) {
       });
       if (!r.ok) {
         const t = await r.text();
-        throw new Error(t || r.statusText);
+        throw new Error(parseFastApiDetail(t) || t || r.statusText);
       }
+      router.refresh();
+    });
+
+  const onApproveEvidence = () =>
+    run(async () => {
+      if (!wallet) throw new Error("Connect a wallet first");
+      const r = await fetch(`${api}/api/v1/tasks/${task.task_id}/approve-evidence`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ wallet }),
+      });
+      const t = await r.text();
+      if (!r.ok) throw new Error(parseFastApiDetail(t) || t || r.statusText);
       router.refresh();
     });
 
@@ -94,11 +121,12 @@ function TaskDetailActionsInner({ task }: { task: TaskRow }) {
         body,
       });
       if (!r.ok) {
-        const t = await r.text();
-        throw new Error(t || r.statusText);
+        const text = await r.text();
+        throw new Error(parseFastApiDetail(text) || text || r.statusText);
       }
       (ev.target as HTMLFormElement).reset();
       setChosenFileName(null);
+      router.refresh();
     });
   };
 
@@ -107,8 +135,9 @@ function TaskDetailActionsInner({ task }: { task: TaskRow }) {
       const r = await fetch(`${api}/api/v1/tasks/${task.task_id}/verify`, { method: "POST" });
       if (!r.ok) {
         const t = await r.text();
-        throw new Error(t || r.statusText);
+        throw new Error(parseFastApiDetail(t) || t || r.statusText);
       }
+      router.refresh();
     });
 
   if (!authenticated) {
@@ -122,7 +151,13 @@ function TaskDetailActionsInner({ task }: { task: TaskRow }) {
     );
   }
 
-  const disabledEvidence = busy || task.status !== "accepted";
+  const st = task.status.toLowerCase();
+  const approvalGate = task.requester_approval_before_verify !== false;
+  const isRequester = walletsEqual(wallet, task.requester_wallet);
+  const isExecutor = walletsEqual(wallet, task.executor_wallet);
+  const awaitingReview = approvalGate && st === "awaiting_requester_review" && Boolean(task.requester_wallet);
+
+  const disabledEvidence = busy || st !== "accepted";
 
   return (
     <Card className="dashboard-reveal dashboard-reveal-d4 mt-8 space-y-5 p-5">
@@ -143,11 +178,34 @@ function TaskDetailActionsInner({ task }: { task: TaskRow }) {
           {msg}
         </p>
       ) : null}
+
+      {awaitingReview ? (
+        <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--bg-2)] px-4 py-3 text-sm leading-relaxed text-[color:var(--ink-2)]">
+          {isRequester ? (
+            <p>
+              Evidence was submitted. Approve it to send the task to verification (your wallet must match the publisher).
+            </p>
+          ) : isExecutor ? (
+            <p>Evidence was submitted and is awaiting approval from the task publisher before verification can run.</p>
+          ) : (
+            <p>
+              Evidence is awaiting approval from the task publisher. Connect the publisher wallet to approve, or open this page
+              as the publisher.
+            </p>
+          )}
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap gap-2.5">
-        <button type="button" disabled={busy || task.status !== "published"} onClick={onAccept} className={primaryBtn}>
+        {awaitingReview && isRequester ? (
+          <button type="button" disabled={busy || !wallet} onClick={onApproveEvidence} className={primaryBtn}>
+            Approve evidence
+          </button>
+        ) : null}
+        <button type="button" disabled={busy || st !== "published"} onClick={onAccept} className={primaryBtn}>
           Accept task
         </button>
-        <button type="button" disabled={busy || task.status !== "submitted"} onClick={onVerify} className={outlineBtn}>
+        <button type="button" disabled={busy || st !== "submitted"} onClick={onVerify} className={outlineBtn}>
           Verify &amp; release
         </button>
       </div>
