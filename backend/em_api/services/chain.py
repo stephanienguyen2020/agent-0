@@ -99,6 +99,26 @@ EM_ESCROW_ABI: list[dict[str, Any]] = [
         "type": "function",
     },
     {
+        "inputs": [
+            {"internalType": "bytes32", "name": "taskId", "type": "bytes32"},
+            {"internalType": "string", "name": "reason", "type": "string"},
+        ],
+        "name": "dispute",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function",
+    },
+    {
+        "inputs": [
+            {"internalType": "bytes32", "name": "taskId", "type": "bytes32"},
+            {"internalType": "bool", "name": "executorWins", "type": "bool"},
+        ],
+        "name": "resolveDispute",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function",
+    },
+    {
         "inputs": [],
         "name": "feeBps",
         "outputs": [{"internalType": "uint16", "name": "", "type": "uint16"}],
@@ -145,6 +165,43 @@ EM_ESCROW_ABI: list[dict[str, Any]] = [
     },
 ]
 
+# Public getter `tasks(bytes32)` (matches contracts/src/EMEscrow.sol Task struct).
+EM_ESCROW_TASKS_VIEW_ABI: list[dict[str, Any]] = [
+    {
+        "inputs": [{"internalType": "bytes32", "name": "", "type": "bytes32"}],
+        "name": "tasks",
+        "outputs": [
+            {"internalType": "bytes32", "name": "taskId", "type": "bytes32"},
+            {"internalType": "address", "name": "agent", "type": "address"},
+            {"internalType": "uint256", "name": "agentErc8004Id", "type": "uint256"},
+            {"internalType": "address", "name": "executor", "type": "address"},
+            {"internalType": "uint256", "name": "executorErc8004Id", "type": "uint256"},
+            {"internalType": "uint8", "name": "category", "type": "uint8"},
+            {"internalType": "uint256", "name": "bounty", "type": "uint256"},
+            {"internalType": "uint256", "name": "platformFee", "type": "uint256"},
+            {"internalType": "uint64", "name": "deadline", "type": "uint64"},
+            {"internalType": "uint8", "name": "status", "type": "uint8"},
+            {"internalType": "bytes32", "name": "evidenceHash", "type": "bytes32"},
+            {"internalType": "string", "name": "evidenceURI", "type": "string"},
+        ],
+        "stateMutability": "view",
+        "type": "function",
+    },
+]
+
+EM_ESCROW_EVENT_ABI: list[dict[str, Any]] = [
+    {
+        "anonymous": False,
+        "inputs": [
+            {"indexed": True, "internalType": "bytes32", "name": "taskId", "type": "bytes32"},
+        ],
+        "name": "TaskVerified",
+        "type": "event",
+    },
+]
+
+EM_ESCROW_ABI_FULL: list[dict[str, Any]] = EM_ESCROW_ABI + EM_ESCROW_TASKS_VIEW_ABI + EM_ESCROW_EVENT_ABI
+
 
 def _w3() -> Web3:
     return Web3(Web3.HTTPProvider(settings.opbnb_rpc_url))
@@ -155,7 +212,7 @@ def _escrow(w3: Web3) -> Contract | None:
         return None
     return w3.eth.contract(
         address=Web3.to_checksum_address(settings.em_escrow_address),
-        abi=EM_ESCROW_ABI,
+        abi=EM_ESCROW_ABI_FULL,
     )
 
 
@@ -249,6 +306,44 @@ class ChainService:
             return self._w3.is_connected() and self._w3.eth.block_number >= 0
         except Exception:
             return False
+
+    def escrow_task_status_uint(self, task_id: str) -> int | None:
+        """Return `EMEscrow.TaskStatus` uint8 (`tasks(taskId).status`), or None if unreadable."""
+        if not self._escrow:
+            return None
+        tid = task_id_to_bytes32(task_id)
+        try:
+            row = self._escrow.functions.tasks(tid).call()
+            return int(row[9])
+        except Exception as e:
+            logger.warning("escrow_task_status_uint failed: %s", e)
+            return None
+
+    def latest_task_verified_tx_hash(self, task_id: str, *, max_blocks_back: int = 80_000) -> str | None:
+        """Find the latest `TaskVerified(taskId)` tx hash from escrow logs (for DB backfill)."""
+        if not settings.em_escrow_address:
+            return None
+        esc = Web3.to_checksum_address(settings.em_escrow_address)
+        tid = task_id_to_bytes32(task_id)
+        sig_h = Web3.to_hex(Web3.keccak(text="TaskVerified(bytes32)"))
+        tid_h = Web3.to_hex(tid)
+        try:
+            latest = int(self._w3.eth.block_number)
+            from_block = max(0, latest - max_blocks_back)
+            logs = self._w3.eth.get_logs(
+                {
+                    "fromBlock": from_block,
+                    "toBlock": latest,
+                    "address": esc,
+                    "topics": [sig_h, tid_h],
+                }
+            )
+        except Exception as e:
+            logger.warning("latest_task_verified_tx_hash get_logs failed: %s", e)
+            return None
+        if not logs:
+            return None
+        return self._w3.to_hex(logs[-1]["transactionHash"])
 
     def wait_for_transaction(self, tx_hash_hex: str | None, *, timeout: int = 180) -> Any:
         """Block until the transaction is mined and success (status 1). Required before a follow-up tx that depends on it."""
@@ -594,6 +689,40 @@ class ChainService:
             return None
         tid = task_id_to_bytes32(task_id)
         fn = self._escrow.functions.release(tid)
+        tx = fn.build_transaction(
+            {
+                "from": self._account.address,
+                "nonce": self._w3.eth.get_transaction_count(self._account.address),
+                "chainId": settings.chain_id,
+            }
+        )
+        tx = _fill_gas(self._w3, tx)
+        signed = self._account.sign_transaction(tx)
+        h = self._w3.eth.send_raw_transaction(signed.raw_transaction)
+        return self._w3.to_hex(h)
+
+    def dispute(self, task_id: str, reason: str) -> str | None:
+        if not self._escrow or not self._account:
+            return None
+        tid = task_id_to_bytes32(task_id)
+        fn = self._escrow.functions.dispute(tid, reason)
+        tx = fn.build_transaction(
+            {
+                "from": self._account.address,
+                "nonce": self._w3.eth.get_transaction_count(self._account.address),
+                "chainId": settings.chain_id,
+            }
+        )
+        tx = _fill_gas(self._w3, tx)
+        signed = self._account.sign_transaction(tx)
+        h = self._w3.eth.send_raw_transaction(signed.raw_transaction)
+        return self._w3.to_hex(h)
+
+    def resolve_dispute(self, task_id: str, executor_wins: bool) -> str | None:
+        if not self._escrow or not self._account:
+            return None
+        tid = task_id_to_bytes32(task_id)
+        fn = self._escrow.functions.resolveDispute(tid, executor_wins)
         tx = fn.build_transaction(
             {
                 "from": self._account.address,

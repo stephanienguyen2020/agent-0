@@ -9,16 +9,16 @@ import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import httpx
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
 from em_api.config import settings
-from em_api.constants import ESCROW_FEE_BPS, REP_COMPLETION_DELTA_SCORE
+from em_api.constants import ESCROW_FEE_BPS
 from em_api.deps import get_chain, get_supabase
 from em_api.services.evidence_schemas import validate_evidence
 from em_api.services.greenfield import (
@@ -26,8 +26,14 @@ from em_api.services.greenfield import (
     public_url_for_dev,
     upload_file_via_greenfield_script,
 )
-from em_api.services.verification import run_pipeline
+from em_api.services.verification_ops import (
+    process_verify_for_task,
+    record_completion_reputation,
+    record_dispute_loss_reputation,
+)
 from em_api.services.chain import PreflightRejected
+from em_api.services.task_assistant_llm import assistant_chat_turn
+from em_api.services.task_draft_llm import draft_chat_gemini
 from em_api.services.x402_facilitator import settle_payment
 
 logger = logging.getLogger(__name__)
@@ -48,16 +54,78 @@ class TaskCreate(BaseModel):
     location_lat: float | None = None
     location_lng: float | None = None
     location_radius_m: int | None = None
+    #: Who may accept (maps `agent` → DB `ai_agent`). Default when omitted: humans + AI agents (A2A-friendly).
+    executor_types_allowed: list[str] | None = None
+    #: Minimum World ID tier required of **human** executors (`tasks_eligible_for`); agents use wallet onboarding.
+    min_world_id_level: str | None = None
 
 
 class TaskAcceptBody(BaseModel):
     executor_wallet: str
     executor_erc8004_id: int = 0
+    #: When the executor row is created on first accept, use this lane (`agent` → ai_agent).
+    executor_type: Literal["human", "agent", "robot"] | None = None
 
 
 class TaskSubmitBody(BaseModel):
     evidence: dict[str, Any]
     filename: str = "evidence.bin"
+
+
+class TaskOpenDisputeBody(BaseModel):
+    wallet: str
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class TaskApproveEvidenceBody(BaseModel):
+    wallet: str
+
+
+class TaskResolveDisputeBody(BaseModel):
+    executor_wins: bool
+    resolution: str | None = Field(default=None, max_length=2000)
+
+
+class DraftChatMessage(BaseModel):
+    role: str = Field(min_length=1, max_length=32)
+    content: str = Field(min_length=1, max_length=12000)
+
+
+class DraftChatRequest(BaseModel):
+    messages: list[DraftChatMessage] = Field(min_length=1, max_length=30)
+
+
+class AssistantChatRequest(BaseModel):
+    messages: list[DraftChatMessage] = Field(min_length=1, max_length=40)
+    requester_wallet: str = Field(min_length=10, max_length=80)
+
+
+# EMEscrow.TaskStatus enum indices (contracts/src/EMEscrow.sol)
+_ESCROW_TS_SUBMITTED = 3
+_ESCROW_TS_VERIFIED = 4
+_ESCROW_TS_DISPUTED = 6
+
+
+_TERMINAL_POST_DISPUTE = frozenset(
+    {
+        "completed",
+        "refunded",
+        "rejected",
+        "expired",
+        "cancelled",
+    }
+)
+
+
+def _require_resolve_operator(x_em_resolve_key: str | None) -> None:
+    expected = (settings.em_resolve_api_key or "").strip()
+    if not expected:
+        raise HTTPException(503, "EM_RESOLVE_API_KEY not configured")
+    got = (x_em_resolve_key or "").strip()
+    if not got:
+        raise HTTPException(401, "missing X-EM-RESOLVE-KEY")
+    if got != expected:
+        raise HTTPException(403, "invalid X-EM-RESOLVE-KEY")
 
 
 def _validate_x402_create(auth: dict, body: TaskCreate, total_micros: int) -> None:
@@ -93,6 +161,55 @@ def _validate_x402_create(auth: dict, body: TaskCreate, total_micros: int) -> No
         )
 
 
+def _normalize_task_executor_types(values: list[str] | None) -> list[str]:
+    """DB executor_type enum values (human | ai_agent | robot)."""
+    if values is None:
+        return ["human", "ai_agent"]
+    out: list[str] = []
+    for raw in values:
+        t = raw.strip().lower()
+        if t == "agent":
+            t = "ai_agent"
+        if t not in ("human", "ai_agent", "robot"):
+            raise HTTPException(
+                400,
+                "executor_types_allowed entries must be human, agent, or robot",
+            )
+        if t not in out:
+            out.append(t)
+    if not out:
+        raise HTTPException(400, "executor_types_allowed cannot be empty")
+    return out
+
+
+def _normalize_min_world_id_level(raw: str | None) -> str:
+    v = (raw or "none").strip().lower()
+    if v not in ("none", "device", "orb"):
+        raise HTTPException(400, "min_world_id_level must be none, device, or orb")
+    return v
+
+
+def _accept_hint_to_executor_type(hint: str | None) -> str | None:
+    if hint is None:
+        return None
+    h = hint.strip().lower()
+    if h == "human":
+        return "human"
+    if h == "agent":
+        return "ai_agent"
+    if h == "robot":
+        return "robot"
+    raise HTTPException(400, "executor_type must be human, agent, or robot")
+
+
+def _normalize_executor_type_for_compare(raw: object) -> str:
+    """Normalize executor_type tokens from Postgres / API (`agent` → ai_agent)."""
+    s = str(raw).strip().lower()
+    if s == "agent":
+        return "ai_agent"
+    return s
+
+
 def _ensure_agent(supa, wallet: str, erc_id: int) -> str:
     w = wallet.lower()
     r = supa.table("agents").select("id").eq("wallet", w).limit(1).execute()
@@ -113,18 +230,27 @@ def _ensure_agent(supa, wallet: str, erc_id: int) -> str:
     return ins.data[0]["id"]
 
 
-def _ensure_executor(supa, wallet: str, erc_id: int) -> str:
+def _ensure_executor(
+    supa,
+    wallet: str,
+    erc_id: int,
+    *,
+    insert_executor_type: str | None = None,
+) -> str:
     w = wallet.lower()
     r = supa.table("executors").select("id").eq("wallet", w).limit(1).execute()
     if r.data:
         return r.data[0]["id"]
+    db_type = insert_executor_type or "human"
+    if db_type not in ("human", "ai_agent", "robot"):
+        db_type = "human"
     ins = (
         supa.table("executors")
         .insert(
             {
                 "wallet": w,
                 "erc8004_agent_id": erc_id,
-                "type": "human",
+                "type": db_type,
                 "display_name": w[:10],
             }
         )
@@ -153,12 +279,78 @@ def escrow_fee_bps(chain=Depends(get_chain)) -> dict:
     return {"fee_bps": bps, "source": "chain" if live is not None else "default"}
 
 
+@router.post("/draft-chat")
+def draft_chat(body: DraftChatRequest) -> dict[str, Any]:
+    """
+    Turn conversational messages into a validated task draft (no chain / wallet actions).
+
+    Requires GEMINI_API_KEY on the API server.
+    """
+    key = (settings.gemini_api_key or "").strip()
+    if not key:
+        raise HTTPException(
+            503,
+            "GEMINI_API_KEY is not configured on the API server; task drafting is unavailable.",
+        )
+    msgs: list[dict[str, str]] = []
+    for m in body.messages:
+        role = m.role.strip().lower()
+        if role not in ("user", "assistant"):
+            role = "user"
+        msgs.append({"role": role, "content": m.content.strip()})
+    try:
+        return draft_chat_gemini(messages=msgs, api_key=key)
+    except RuntimeError as e:
+        raise HTTPException(502, detail=str(e)) from e
+
+
+@router.post("/assistant-chat")
+def assistant_chat(body: AssistantChatRequest) -> dict[str, Any]:
+    """
+    Unified assistant: task Q&A (tools), optional create-task draft, pending_actions for client-side txs.
+
+    Requires GEMINI_API_KEY and Supabase. Pass the connected wallet as requester_wallet.
+    """
+    key = (settings.gemini_api_key or "").strip()
+    if not key:
+        raise HTTPException(
+            503,
+            "GEMINI_API_KEY is not configured on the API server; assistant is unavailable.",
+        )
+    supa = get_supabase()
+    if not supa:
+        raise HTTPException(503, "Supabase not configured")
+    msgs: list[dict[str, str]] = []
+    for m in body.messages:
+        role = m.role.strip().lower()
+        if role not in ("user", "assistant"):
+            role = "user"
+        msgs.append({"role": role, "content": m.content.strip()})
+    try:
+        w = Web3.to_checksum_address(body.requester_wallet.strip())
+    except Exception as e:
+        raise HTTPException(400, "invalid requester_wallet") from e
+    try:
+        return assistant_chat_turn(
+            messages=msgs,
+            requester_wallet=w,
+            supa=supa,
+            api_key=key,
+        )
+    except RuntimeError as e:
+        raise HTTPException(502, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
 @router.post("")
 def create_task(request: Request, body: TaskCreate, chain=Depends(get_chain)) -> dict:
     supa = get_supabase()
     if not supa:
         raise HTTPException(503, "Supabase not configured")
     agent_id = _ensure_agent(supa, body.requester_wallet, body.requester_erc8004_id)
+    exec_allow = _normalize_task_executor_types(body.executor_types_allowed)
+    mw_level = _normalize_min_world_id_level(body.min_world_id_level)
     task_id = "tk_" + uuid.uuid4().hex
     fee_bps_live = chain.escrow_fee_bps()
     fee_bps = fee_bps_live if fee_bps_live is not None else ESCROW_FEE_BPS
@@ -252,6 +444,8 @@ def create_task(request: Request, body: TaskCreate, chain=Depends(get_chain)) ->
         "deadline_at": deadline.isoformat(),
         "evidence_schema": body.evidence_schema,
         "executor_requirements": body.executor_requirements,
+        "executor_types_allowed": exec_allow,
+        "min_world_id_level": mw_level,
         "location_lat": body.location_lat,
         "location_lng": body.location_lng,
         "location_radius_m": body.location_radius_m,
@@ -291,19 +485,67 @@ def accept_task(task_id: str, body: TaskAcceptBody, chain=Depends(get_chain)) ->
     task_row = tr.data
     bounty_micros = int(task_row.get("bounty_micros") or 0)
 
-    ex_id = _ensure_executor(supa, body.executor_wallet, body.executor_erc8004_id)
+    insert_et = _accept_hint_to_executor_type(body.executor_type)
+    ex_id = _ensure_executor(
+        supa,
+        body.executor_wallet,
+        body.executor_erc8004_id,
+        insert_executor_type=insert_et,
+    )
+
+    ex_sel = (
+        supa.table("executors")
+        .select("type,verification_level,wallet_proof_verified_at")
+        .eq("id", ex_id)
+        .single()
+        .execute()
+    )
+    if not ex_sel.data:
+        raise HTTPException(500, "executor row missing")
+    ex_meta = ex_sel.data
+    etype = str(ex_meta.get("type") or "human")
+
+    allowed_raw = task_row.get("executor_types_allowed")
+    if allowed_raw is None:
+        allowed_list: list[object] = ["human"]
+    elif isinstance(allowed_raw, list):
+        allowed_list = list(allowed_raw)
+    else:
+        allowed_list = [allowed_raw]
+    allowed_norm = {_normalize_executor_type_for_compare(x) for x in allowed_list if x is not None}
+    if etype not in allowed_norm:
+        raise HTTPException(
+            403,
+            "executor type is not allowed for this task (see task executor_types_allowed)",
+        )
+
     if settings.world_id_accept_enforce:
-        level = _executor_world_id_level(supa, ex_id)
-        if not level:
-            raise HTTPException(
-                403,
-                "World ID verification required before accepting tasks (complete /register)",
-            )
-        if bounty_micros >= settings.world_id_orb_bounty_threshold_micros and level != "orb":
-            raise HTTPException(
-                403,
-                f"Bounty ≥ ${settings.world_id_orb_bounty_threshold_micros // 1_000_000} USDC requires Orb verification",
-            )
+        if etype == "human":
+            level = _executor_world_id_level(supa, ex_id)
+            if not level:
+                raise HTTPException(
+                    403,
+                    "World ID verification required before accepting tasks (complete /register)",
+                )
+            min_w = str(task_row.get("min_world_id_level") or "none").lower()
+            if min_w == "device" and level not in ("device", "orb"):
+                raise HTTPException(403, "Task requires at least device-level World ID for human executors")
+            if min_w == "orb" and level != "orb":
+                raise HTTPException(403, "Task requires Orb-level World ID for human executors")
+            if bounty_micros >= settings.world_id_orb_bounty_threshold_micros and level != "orb":
+                raise HTTPException(
+                    403,
+                    f"Bounty ≥ ${settings.world_id_orb_bounty_threshold_micros // 1_000_000} USDC requires Orb verification",
+                )
+        elif etype in ("ai_agent", "robot"):
+            if not ex_meta.get("wallet_proof_verified_at"):
+                raise HTTPException(
+                    403,
+                    "Agent executor onboarding required: POST /api/v1/executors/agent-challenge then agent-verify",
+                )
+        else:
+            raise HTTPException(403, f"unsupported executor type: {etype}")
+
     tx = chain.accept_task(task_id, body.executor_wallet, body.executor_erc8004_id)
     now = datetime.now(timezone.utc).isoformat()
     supa.table("tasks").update(
@@ -446,8 +688,17 @@ async def submit_task(
                 }
             ).execute()
 
+    review_status = (
+        "awaiting_requester_review"
+        if settings.requester_approval_before_verify
+        else "submitted"
+    )
     supa.table("tasks").update(
-        {"status": "submitted", "submitted_at": datetime.now(timezone.utc).isoformat(), "on_chain_tx_submit": tx}
+        {
+            "status": review_status,
+            "submitted_at": datetime.now(timezone.utc).isoformat(),
+            "on_chain_tx_submit": tx,
+        }
     ).eq("task_id", task_id).execute()
 
     return {"task_id": task_id, "evidence_id": evidence_id, "on_chain_tx_submit": tx}
@@ -468,103 +719,279 @@ def _evidence_dict_from_items(category: str, items: list[dict]) -> dict[str, Any
     return out
 
 
-@router.post("/{task_id}/verify")
-def verify_task(task_id: str, chain=Depends(get_chain)) -> dict:
-    """Run verifier pipeline (L1 + optional Gemini L2); on success settle on-chain."""
+@router.post("/{task_id}/approve-evidence")
+def approve_task_evidence(task_id: str, body: TaskApproveEvidenceBody) -> dict:
+    """Requester-only: advance DB from awaiting_requester_review → submitted so POST /verify may run."""
     supa = get_supabase()
     if not supa:
         raise HTTPException(503, "Supabase not configured")
+    if not settings.requester_approval_before_verify:
+        raise HTTPException(409, "requester approval gate is disabled (REQUESTER_APPROVAL_BEFORE_VERIFY=false)")
+
     tr = supa.table("tasks").select("*").eq("task_id", task_id).single().execute()
     if not tr.data:
         raise HTTPException(404, "task not found")
     task = tr.data
-    category = task["category"]
 
-    ev_row = (
-        supa.table("evidence")
-        .select("id")
-        .eq("task_id", task_id)
-        .order("submitted_at", desc=True)
-        .limit(1)
-        .execute()
-    )
-    if not ev_row.data:
-        raise HTTPException(400, "no evidence to verify")
-    evidence_id = ev_row.data[0]["id"]
-    items_r = supa.table("evidence_items").select("*").eq("evidence_id", evidence_id).execute()
-    items = items_r.data or []
-    ev_dict = _evidence_dict_from_items(category, items)
+    st = str(task.get("status") or "").lower()
+    if st != "awaiting_requester_review":
+        raise HTTPException(400, "task is not awaiting requester review")
 
-    gemini_key = settings.gemini_api_key.strip() if settings.gemini_api_key else None
-    pipeline = run_pipeline(category, ev_dict, gemini_key)
-    if not pipeline.passed:
-        supa.table("verifications").insert(
-            {
-                "task_id": task_id,
-                "evidence_id": evidence_id,
-                "level": pipeline.final_level,
-                "passed": False,
-                "confidence": None,
-                "reason": pipeline.reason,
-                "raw": pipeline.details,
-            }
-        ).execute()
-        raise HTTPException(422, f"verification failed: {pipeline.reason}")
+    agent_id = task.get("agent_id")
+    if not agent_id:
+        raise HTTPException(400, "task has no agent_id")
 
-    txv = chain.mark_verified(task_id)
-    chain.wait_for_transaction(txv)
-    txr = chain.release(task_id)
+    ar = supa.table("agents").select("wallet").eq("id", str(agent_id)).single().execute()
+    agent_wallet = (ar.data or {}).get("wallet")
+    if not agent_wallet:
+        raise HTTPException(400, "could not resolve requester wallet")
+
+    w = body.wallet.strip().lower()
+    if w != str(agent_wallet).lower():
+        raise HTTPException(403, "wallet must be the task requester (publisher)")
+
     now = datetime.now(timezone.utc).isoformat()
     supa.table("tasks").update(
         {
-            "status": "completed",
-            "verified_at": now,
-            "settled_at": now,
-            "on_chain_tx_verify": txv,
-            "on_chain_tx_release": txr,
+            "status": "submitted",
+            "evidence_approved_at": now,
+            "updated_at": now,
         }
     ).eq("task_id", task_id).execute()
-    level_db = pipeline.final_level if pipeline.final_level in (
-        "l1_auto",
-        "l2_ai",
-        "l3_agent",
-        "l4_arbitration",
-    ) else "l2_ai"
-    supa.table("verifications").insert(
-        {
+
+    return {"task_id": task_id, "status": "submitted", "evidence_approved_at": now}
+
+
+@router.post("/{task_id}/verify")
+def verify_task(task_id: str, chain=Depends(get_chain)) -> dict:
+    """Run verifier pipeline (L1 + optional Gemini L2); on success settle on-chain (or verified-only if split)."""
+    supa = get_supabase()
+    if not supa:
+        raise HTTPException(503, "Supabase not configured")
+    out = process_verify_for_task(supa=supa, chain=chain, settings=settings, task_id=task_id)
+    if not out.get("ok"):
+        err = out.get("error") or "verify failed"
+        if err == "task not found":
+            raise HTTPException(404, err)
+        if err == "no evidence to verify":
+            raise HTTPException(400, err)
+        if err == "requester approval required":
+            raise HTTPException(403, err)
+        raise HTTPException(422, err)
+    if out.get("skipped"):
+        return {
             "task_id": task_id,
-            "evidence_id": evidence_id,
-            "level": level_db,
-            "passed": True,
-            "confidence": 1.0,
-            "reason": pipeline.reason,
-            "raw": pipeline.details,
+            "skipped": True,
+            "status": out.get("status"),
+            "on_chain_tx_verify": None,
+            "on_chain_tx_release": None,
         }
-    ).execute()
+    return {
+        "task_id": task_id,
+        "on_chain_tx_verify": out.get("on_chain_tx_verify"),
+        "on_chain_tx_release": out.get("on_chain_tx_release"),
+    }
+
+
+@router.post("/{task_id}/dispute")
+def open_task_dispute(task_id: str, body: TaskOpenDisputeBody, chain=Depends(get_chain)) -> dict:
+    """Participant requests escalation: API validates wallet, broadcasts `dispute(taskId, reason)` as EM_AGENT."""
+    supa = get_supabase()
+    if not supa:
+        raise HTTPException(503, "Supabase not configured")
+
+    tr = supa.table("tasks").select("*").eq("task_id", task_id).single().execute()
+    if not tr.data:
+        raise HTTPException(404, "task not found")
+    task = tr.data
+
+    st = str(task.get("status") or "").lower()
+    if st not in ("submitted", "verified", "awaiting_requester_review"):
+        raise HTTPException(400, "task must be awaiting review, submitted, or verified to open a dispute")
+
+    w = body.wallet.strip().lower()
+    agent_id = task.get("agent_id")
     executor_id = task.get("executor_id")
+    if not agent_id:
+        raise HTTPException(400, "task has no agent_id")
+
+    ar = supa.table("agents").select("wallet").eq("id", str(agent_id)).single().execute()
+    agent_wallet = (ar.data or {}).get("wallet")
+    if not agent_wallet:
+        raise HTTPException(400, "could not resolve requester wallet")
+
+    executor_wallet: str | None = None
     if executor_id:
-        ex_r = (
-            supa.table("executors")
-            .select("erc8004_agent_id")
-            .eq("id", executor_id)
-            .single()
-            .execute()
+        er = supa.table("executors").select("wallet").eq("id", str(executor_id)).single().execute()
+        executor_wallet = (er.data or {}).get("wallet")
+
+    raised_by: str | None = None
+    if w == str(agent_wallet).lower():
+        raised_by = "requester"
+    elif executor_wallet and w == str(executor_wallet).lower():
+        raised_by = "executor"
+    else:
+        raise HTTPException(403, "wallet must be the task requester or assigned executor")
+
+    dup = (
+        supa.table("disputes")
+        .select("id")
+        .eq("task_id", task_id)
+        .in_("status", ["open", "under_review"])
+        .limit(1)
+        .execute()
+    )
+    if dup.data:
+        raise HTTPException(409, "an open dispute already exists for this task")
+
+    on_chain = chain.escrow_task_status_uint(task_id)
+    if on_chain is None:
+        raise HTTPException(502, "could not read on-chain escrow task status")
+    if on_chain not in (_ESCROW_TS_SUBMITTED, _ESCROW_TS_VERIFIED):
+        raise HTTPException(
+            400,
+            f"escrow task status must be Submitted ({_ESCROW_TS_SUBMITTED}) or "
+            f"Verified ({_ESCROW_TS_VERIFIED}); on-chain={on_chain}",
         )
-        if ex_r.data:
-            bounty_micros = int(task.get("bounty_micros") or 0)
-            supa.table("reputation_events").insert(
-                {
-                    "executor_id": executor_id,
-                    "erc8004_agent_id": ex_r.data["erc8004_agent_id"],
-                    "event_type": "completion",
-                    "delta_score": REP_COMPLETION_DELTA_SCORE,
-                    "source_task_id": task_id,
-                    "source_category": category,
-                    "earned_micros": bounty_micros,
-                    "on_chain_tx": txr or "",
-                }
-            ).execute()
-    return {"task_id": task_id, "on_chain_tx_verify": txv, "on_chain_tx_release": txr}
+
+    txh = chain.dispute(task_id, body.reason.strip())
+    if not txh:
+        raise HTTPException(503, "EM_AGENT_PRIVATE_KEY / EM_ESCROW not configured for dispute tx")
+
+    chain.wait_for_transaction(txh)
+
+    now = datetime.now(timezone.utc).isoformat()
+    ins = (
+        supa.table("disputes")
+        .insert(
+            {
+                "task_id": task_id,
+                "raised_by": raised_by,
+                "raised_by_wallet": w,
+                "reason": body.reason.strip(),
+                "status": "open",
+            }
+        )
+        .execute()
+    )
+    dispute_row = (ins.data or [None])[0]
+
+    supa.table("tasks").update(
+        {
+            "status": "disputed",
+            "updated_at": now,
+            "on_chain_tx_dispute": txh,
+        }
+    ).eq("task_id", task_id).execute()
+
+    return {
+        "task_id": task_id,
+        "on_chain_tx_dispute": txh,
+        "dispute_id": str(dispute_row.get("id")) if dispute_row and dispute_row.get("id") else None,
+        "raised_by": raised_by,
+    }
+
+
+@router.post("/{task_id}/resolve-dispute")
+def resolve_task_dispute(
+    task_id: str,
+    body: TaskResolveDisputeBody,
+    chain=Depends(get_chain),
+    x_em_resolve_key: str | None = Header(None, alias="X-EM-RESOLVE-KEY"),
+) -> dict:
+    """Operator-only: broadcast `resolveDispute(taskId, executorWins)` as EM_AGENT; settle DB + reputation."""
+    _require_resolve_operator(x_em_resolve_key)
+
+    supa = get_supabase()
+    if not supa:
+        raise HTTPException(503, "Supabase not configured")
+
+    tr = supa.table("tasks").select("*").eq("task_id", task_id).single().execute()
+    if not tr.data:
+        raise HTTPException(404, "task not found")
+    task = tr.data
+
+    st = str(task.get("status") or "").lower()
+    if st in _TERMINAL_POST_DISPUTE:
+        raise HTTPException(409, "task already in a terminal state")
+
+    if st != "disputed":
+        raise HTTPException(409, "task must be disputed to resolve")
+
+    act = (
+        supa.table("disputes")
+        .select("id,status")
+        .eq("task_id", task_id)
+        .in_("status", ["open", "under_review"])
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    rows = act.data or []
+    if not rows:
+        raise HTTPException(409, "no active dispute row to resolve")
+
+    dispute_id = rows[0].get("id")
+
+    on_chain = chain.escrow_task_status_uint(task_id)
+    if on_chain is None:
+        raise HTTPException(502, "could not read on-chain escrow task status")
+    if on_chain != _ESCROW_TS_DISPUTED:
+        raise HTTPException(
+            400,
+            f"escrow task status must be Disputed ({_ESCROW_TS_DISPUTED}); on-chain={on_chain}",
+        )
+
+    txh = chain.resolve_dispute(task_id, body.executor_wins)
+    if not txh:
+        raise HTTPException(503, "EM_AGENT_PRIVATE_KEY / EM_ESCROW not configured for resolve tx")
+
+    chain.wait_for_transaction(txh)
+
+    now = datetime.now(timezone.utc).isoformat()
+    new_d_status = "resolved_executor" if body.executor_wins else "resolved_requester"
+    resolution_note = (body.resolution or "").strip() or (
+        "Executor wins — funds released per dispute resolution."
+        if body.executor_wins
+        else "Requester wins — bounty refunded per dispute resolution."
+    )
+
+    supa.table("disputes").update(
+        {
+            "status": new_d_status,
+            "resolution": resolution_note,
+            "resolved_at": now,
+        }
+    ).eq("id", str(dispute_id)).execute()
+
+    if body.executor_wins:
+        supa.table("tasks").update(
+            {
+                "status": "completed",
+                "settled_at": now,
+                "updated_at": now,
+                "on_chain_tx_resolve_dispute": txh,
+                "on_chain_tx_release": txh,
+            }
+        ).eq("task_id", task_id).execute()
+        record_completion_reputation(supa, task_id, task, txh)
+    else:
+        supa.table("tasks").update(
+            {
+                "status": "refunded",
+                "updated_at": now,
+                "on_chain_tx_resolve_dispute": txh,
+                "on_chain_tx_refund": txh,
+            }
+        ).eq("task_id", task_id).execute()
+        record_dispute_loss_reputation(supa, task_id, task, txh)
+
+    return {
+        "task_id": task_id,
+        "executor_wins": body.executor_wins,
+        "on_chain_tx_resolve_dispute": txh,
+        "dispute_status": new_d_status,
+    }
 
 
 @router.get("/{task_id}")
@@ -575,4 +1002,16 @@ def get_task(task_id: str) -> dict:
     r = supa.table("tasks").select("*").eq("task_id", task_id).single().execute()
     if not r.data:
         raise HTTPException(404, "task not found")
-    return r.data
+    row = dict(r.data)
+    row["requester_approval_before_verify"] = settings.requester_approval_before_verify
+    aid = row.get("agent_id")
+    if aid:
+        ar = supa.table("agents").select("wallet").eq("id", str(aid)).single().execute()
+        if ar.data:
+            row["requester_wallet"] = ar.data.get("wallet")
+    eid = row.get("executor_id")
+    if eid:
+        er = supa.table("executors").select("wallet").eq("id", str(eid)).single().execute()
+        if er.data:
+            row["executor_wallet"] = er.data.get("wallet")
+    return row
