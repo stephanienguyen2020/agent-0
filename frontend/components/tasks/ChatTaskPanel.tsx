@@ -52,6 +52,13 @@ function formatDeadline(iso: string): string {
   }
 }
 
+/** Short affirmative replies — keep prior draft when the API omits draft on the follow-up turn. */
+function isShortConfirmationReply(content: string): boolean {
+  const s = content.trim().toLowerCase().replace(/\s+/g, " ");
+  if (!s || s.length > 96) return false;
+  return /^(yes|y|yeah|yep|correct|ok|okay|sure|proceed|go ahead)(\s+(please|thanks|thank you))?[\s!.]*$/i.test(s);
+}
+
 /** Wrap task ids so Markdown renders them as in-app links. */
 function linkifyTaskIdsInMarkdown(src: string): string {
   return src.replace(/\b(tk_[a-f0-9]{8,})\b/gi, "[$1](/tasks/$1)");
@@ -278,8 +285,15 @@ export function ChatTaskPanel() {
           : "No reply.";
       setMessages((m) => [...m, { role: "assistant", content: assistantMsg }]);
 
-      const d = "draft" in data ? data.draft : null;
-      setDraft(d && typeof d === "object" ? (d as TaskDraftFromApi) : null);
+      const incomingDraft =
+        "draft" in data && data.draft && typeof data.draft === "object"
+          ? (data.draft as TaskDraftFromApi)
+          : null;
+      setDraft((prev) => {
+        if (incomingDraft) return incomingDraft;
+        if (prev && isShortConfirmationReply(text)) return prev;
+        return null;
+      });
 
       const pa = "pending_actions" in data ? data.pending_actions : undefined;
       setPendingActions(Array.isArray(pa) ? (pa as PendingAction[]) : []);

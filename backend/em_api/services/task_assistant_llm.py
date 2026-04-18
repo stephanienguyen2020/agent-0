@@ -417,6 +417,10 @@ def assistant_chat_turn(
         "- list_my_tasks: arguments {limit?: number}\n"
         "When they want to create a market task, fill draft (categories: physical_presence, knowledge_access, "
         "human_authority, agent_to_agent, simple_action) with bounty_usdc, instructions, etc.\n"
+        "When the user confirms task creation (e.g. yes, ok, proceed), you MUST include the complete draft object "
+        "in JSON — same shape as when first proposing the task — not prose-only; never ask them to review details "
+        "without including draft. For physical_presence, draft MUST include location_lat and location_lng "
+        "(use rough defaults if unspecified, e.g. city center).\n"
         "When they clearly ask to approve evidence, open a dispute, run verify/release, or accept as executor, "
         "add pending_actions with task_id from context or tools — do not invent task ids.\n"
         "open_dispute must include non-empty reason (min 3 chars).\n"
@@ -460,17 +464,18 @@ def assistant_chat_turn(
             "When naming a specific task from these results, include its task_id (tk_…) in the prose. "
             "For acceptance, executor, or who accepted, base the answer on get_task results (executor_wallet, status); "
             "do not ask the user for a task id if these results or the opening Recent tasks block already identify the task. "
-            "If they were creating a task, include draft if appropriate. "
-            "Include pending_actions only if user intent matches. "
-            "Return ONLY JSON: "
-            '{"assistant_message":"...","needs_clarification":false,"draft":null,"pending_actions":[]}'
+            "If they were creating or confirming a task, include the full draft object when the task is ready for "
+            "review or publish (same fields as draft-chat); only use draft null when this turn is not about "
+            "task creation. Include pending_actions only if user intent matches. "
+            "Return ONLY JSON with keys assistant_message, needs_clarification, draft, pending_actions."
         )
         contents2 = contents + [{"role": "user", "parts": [{"text": follow}]}]
         summarizer_si = (
             recent_tasks_block
             + "\nSummarize tool results; output JSON only with keys assistant_message, needs_clarification, draft, pending_actions. "
             "Include tk_… when naming a concrete task. For executor/acceptance questions, use get_task fields from the tool JSON; "
-            "never ask the user for a task id when the Recent tasks block above or tool results already supply it."
+            "never ask the user for a task id when the Recent tasks block above or tool results already supply it. "
+            "If the user was creating a task, include the full draft when applicable."
         )
         parsed = _gemini_json_response(
             system_instruction=summarizer_si,
@@ -491,7 +496,7 @@ def assistant_chat_turn(
         if vd is not None:
             draft_out = vd
         elif err:
-            logger.debug("assistant draft validation: %s", err)
+            logger.warning("assistant draft validation failed: %s", err)
 
     pending_raw = parsed.get("pending_actions")
     pending_list: list[dict[str, Any]] = []

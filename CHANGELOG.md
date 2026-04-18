@@ -29,6 +29,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Create with AI (`/tasks/chat`):** **[`ChatTaskPanel`](frontend/components/tasks/ChatTaskPanel.tsx)** keeps the last validated draft when the user sends a short confirmation (**yes**, **ok**, **proceed**, etc.) but **`POST /api/v1/tasks/assistant-chat`** returns **`draft: null`**, so the **Draft ready** panel still appears after “review the details” turns.
+- **API (`POST /api/v1/tasks/assistant-chat`):** **[`task_assistant_llm.py`](backend/em_api/services/task_assistant_llm.py)** prompts require a complete **`draft`** JSON on confirmation and when asking for review (**`physical_presence`** includes coordinates); tool-follow wording no longer suggests **`draft`** must always be **`null`**; assistant draft validation failures log at **warning**.
+
 - **Railway workers:** restored tracked **`agents/emagents/**`** Python sources (merged from **`dev`** / branch history) — deployment branches that omitted this tree caused **`ModuleNotFoundError: No module named 'emagents'`** at runtime after **`pip install -e ./agents`**. [docs/railway-deploy.md](docs/railway-deploy.md) §4.3 / §9 clarify per-service **`WORKER_MODULE`** (reputation ≠ **`verifier_worker`**).
 
 - **Railway workers:** [`agents/pyproject.toml`](agents/pyproject.toml) was missing from the repo, so **`pip install -e './agents[realtime]'`** failed during Nixpacks install with **`neither 'setup.py' nor 'pyproject.toml' found`** under **`/app/agents`**. Restored the **`execution-market-agents`** manifest (deps + **`[realtime]`** extra aligned with **`execution_market_agents.egg-info`**).
