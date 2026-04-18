@@ -44,7 +44,7 @@ export function DashboardTopbar({
     >
       <div className="min-w-0 flex-1">
         <div
-          className="text-[clamp(24px,5.5vw,34px)] font-normal leading-none tracking-[-0.01em] text-[color:var(--ink)] sm:text-[clamp(28px,3.6vw,34px)]"
+          className="break-words text-[clamp(24px,5.5vw,34px)] font-normal leading-[1.12] tracking-[-0.01em] text-[color:var(--ink)] sm:text-[clamp(28px,3.6vw,34px)] line-clamp-2 sm:line-clamp-none"
           style={{ fontFamily: "var(--font-instrument-serif), ui-serif, Georgia, serif" }}
         >
           {title}

@@ -41,15 +41,15 @@ function TxRow({ label, hash }: { label: string; hash: string }) {
   }, [hash]);
 
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-az-stroke py-2.5 last:border-0">
-      <span className="min-w-[140px] text-[11px] font-semibold uppercase tracking-wide text-az-muted-2">
+    <div className="flex flex-wrap items-center gap-2 border-b border-[color:var(--line)] py-2.5 last:border-0">
+      <span className="min-w-[140px] text-[11px] font-semibold uppercase tracking-wide text-[color:var(--mute)]">
         {label}
       </span>
       <a
         href={url}
         target="_blank"
         rel="noopener noreferrer"
-        className="az-mono min-w-0 flex-1 truncate text-[12px] text-[#cdf56a] underline-offset-2 hover:underline"
+        className="min-w-0 flex-1 truncate font-mono text-[12px] text-[color:var(--accent)] underline-offset-2 hover:underline"
         title={hash}
       >
         {shortTxHash(hash)}
@@ -57,7 +57,7 @@ function TxRow({ label, hash }: { label: string; hash: string }) {
       <button
         type="button"
         onClick={() => void onCopy()}
-        className="shrink-0 rounded-lg border border-az-stroke-2 bg-white/[0.06] px-2 py-1 text-[11px] font-semibold text-az-muted-2 transition hover:border-white/[0.15] hover:text-az-text"
+        className="shrink-0 rounded-lg border border-[color:var(--line)] bg-[color:var(--bg-2)] px-2 py-1 text-[11px] font-semibold text-[color:var(--ink-2)] transition hover:border-[color:color-mix(in_oklab,var(--accent)_35%,var(--line))] hover:text-[color:var(--ink)]"
       >
         {copied ? "Copied" : "Copy"}
       </button>
@@ -81,73 +81,73 @@ export function TaskSettlementDetails({ task }: { task: TaskApiRecord }) {
   return (
     <div className="space-y-6">
       <div className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-xl border border-az-stroke bg-white/[0.03] px-4 py-3">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-az-muted-2">Bounty</div>
-          <div className="mt-1 text-lg font-bold tabular-nums text-[#cdf56a]">
+        <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--bg-2)] px-4 py-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--mute)]">Bounty</div>
+          <div className="mt-1 text-lg font-bold tabular-nums text-[color:var(--accent)]">
             ${microsToUsdc(task.bounty_micros)}{" "}
-            <span className="text-xs font-medium text-az-muted-2">{task.token ?? "USDC"}</span>
+            <span className="text-xs font-medium text-[color:var(--mute)]">{task.token ?? "USDC"}</span>
           </div>
         </div>
-        <div className="rounded-xl border border-az-stroke bg-white/[0.03] px-4 py-3">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-az-muted-2">Escrow fee</div>
-          <div className="mt-1 text-lg font-bold tabular-nums text-az-text">
+        <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--bg-2)] px-4 py-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--mute)]">Escrow fee</div>
+          <div className="mt-1 text-lg font-bold tabular-nums text-[color:var(--ink)]">
             ${microsToUsdc(task.fee_micros)}{" "}
-            <span className="text-xs font-medium text-az-muted-2">{task.token ?? "USDC"}</span>
+            <span className="text-xs font-medium text-[color:var(--mute)]">{task.token ?? "USDC"}</span>
           </div>
         </div>
       </div>
 
       <div>
-        <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-az-muted-2">Timeline</h3>
-        <ul className="space-y-1.5 text-sm text-az-text">
+        <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--mute)]">Timeline</h3>
+        <ul className="space-y-1.5 text-sm text-[color:var(--ink)]">
           <li>
-            <span className="text-az-muted-2">Created:</span> {formatWhen(task.created_at)}
+            <span className="text-[color:var(--mute)]">Created:</span> {formatWhen(task.created_at)}
           </li>
           <li>
-            <span className="text-az-muted-2">Deadline:</span> {formatWhen(task.deadline_at)}
+            <span className="text-[color:var(--mute)]">Deadline:</span> {formatWhen(task.deadline_at)}
           </li>
           <li>
-            <span className="text-az-muted-2">Accepted:</span> {formatWhen(task.accepted_at)}
+            <span className="text-[color:var(--mute)]">Accepted:</span> {formatWhen(task.accepted_at)}
           </li>
           <li>
-            <span className="text-az-muted-2">Submitted:</span> {formatWhen(task.submitted_at)}
+            <span className="text-[color:var(--mute)]">Submitted:</span> {formatWhen(task.submitted_at)}
           </li>
           <li>
-            <span className="text-az-muted-2">Verified:</span> {formatWhen(task.verified_at)}
+            <span className="text-[color:var(--mute)]">Verified:</span> {formatWhen(task.verified_at)}
           </li>
           <li>
-            <span className="text-az-muted-2">Settled:</span> {formatWhen(task.settled_at)}
+            <span className="text-[color:var(--mute)]">Settled:</span> {formatWhen(task.settled_at)}
           </li>
           <li>
-            <span className="text-az-muted-2">Updated:</span> {formatWhen(task.updated_at)}
+            <span className="text-[color:var(--mute)]">Updated:</span> {formatWhen(task.updated_at)}
           </li>
         </ul>
       </div>
 
       {filled.length > 0 ? (
         <div>
-          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-az-muted-2">
+          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--mute)]">
             On-chain transactions
           </h3>
-          <div className="rounded-xl border border-az-stroke bg-white/[0.02] px-3">
+          <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--bg-2)] px-3">
             {filled.map((r) => (
               <TxRow key={r.label} label={r.label} hash={r.hash!} />
             ))}
           </div>
-          <p className="mt-2 text-[11px] text-az-muted-2">
+          <p className="mt-2 text-[11px] text-[color:var(--mute)]">
             Explorer: opBNB Testnet ·{" "}
             <a
               href={explorerOrigin()}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[#cdf56a] underline-offset-2 hover:underline"
+              className="text-[color:var(--accent)] underline-offset-2 hover:underline"
             >
               testnet.opbnbscan.com
             </a>
           </p>
         </div>
       ) : (
-        <p className="text-sm text-az-muted-2">No transaction hashes recorded yet.</p>
+        <p className="text-sm text-[color:var(--mute)]">No transaction hashes recorded yet.</p>
       )}
     </div>
   );

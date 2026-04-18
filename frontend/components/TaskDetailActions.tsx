@@ -5,7 +5,6 @@ import { useCallback, useId, useState, type FormEvent } from "react";
 import { useAccount } from "wagmi";
 
 import { usePrivyConfigured } from "@/app/providers";
-import { BtnPrimary } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { getApiBase } from "@/lib/api-base";
 
@@ -15,8 +14,14 @@ type TaskRow = {
   title?: string;
 };
 
+const primaryBtn =
+  "hero-primary-cta dashboard-btn shine relative z-[1] inline-flex h-11 items-center justify-center gap-2 rounded-full border border-[color:var(--accent)] bg-[color:var(--accent)] px-[22px] text-[13px] font-semibold text-[color:var(--ed-on-accent)] [transition-timing-function:cubic-bezier(0.2,0.9,0.2,1)] disabled:pointer-events-none disabled:opacity-45";
+
 const outlineBtn =
-  "inline-flex h-11 items-center justify-center rounded-[14px] border border-az-stroke-2 bg-white/[0.04] px-5 text-[13px] font-semibold text-az-text transition hover:border-white/[0.15] hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:opacity-45";
+  "dashboard-btn inline-flex h-11 items-center justify-center rounded-full border border-[color:var(--line)] bg-transparent px-[22px] text-[13px] font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--bg-2)] disabled:pointer-events-none disabled:opacity-45";
+
+const fileLabelBase =
+  "inline-flex h-11 cursor-pointer items-center rounded-full border border-[color:var(--line)] bg-[color:var(--bg-2)] px-[22px] text-[13px] font-semibold text-[color:var(--ink)] transition hover:border-[color:color-mix(in_oklab,var(--accent)_40%,var(--line))] hover:bg-[color:color-mix(in_oklab,var(--accent)_6%,var(--bg-2))]";
 
 const TERMINAL_STATUSES = new Set([
   "completed",
@@ -105,11 +110,11 @@ function TaskDetailActionsInner({ task }: { task: TaskRow }) {
 
   if (!authenticated) {
     return (
-      <Card className="mt-8 p-5">
-        <p className="text-sm text-az-muted-2">Connect your wallet to accept or submit evidence.</p>
-        <BtnPrimary type="button" className="mt-4" onClick={() => login()}>
+      <Card className="dashboard-reveal dashboard-reveal-d4 mt-8 p-5">
+        <p className="text-sm text-[color:var(--ink-2)]">Connect your wallet to accept or submit evidence.</p>
+        <button type="button" className={`${primaryBtn} mt-4`} onClick={() => login()}>
           Connect wallet
-        </BtnPrimary>
+        </button>
       </Card>
     );
   }
@@ -117,26 +122,34 @@ function TaskDetailActionsInner({ task }: { task: TaskRow }) {
   const disabledEvidence = busy || task.status !== "accepted";
 
   return (
-    <Card className="mt-8 space-y-5 p-5">
-      <p className="text-xs text-az-muted-2">
+    <Card className="dashboard-reveal dashboard-reveal-d4 mt-8 space-y-5 p-5">
+      <p className="text-xs text-[color:var(--mute)]">
         API:{" "}
-        <code className="rounded-lg border border-az-stroke-2 bg-white/[0.04] px-2 py-0.5 font-mono text-[11px] text-[#cdf56a]">
+        <code className="rounded-lg border border-[color:var(--line)] bg-[color:var(--bg-2)] px-2 py-0.5 font-mono text-[11px] text-[color:var(--accent)]">
           {api}
         </code>
       </p>
-      {msg && (
-        <p className={`text-sm ${msg === "OK" ? "text-emerald-400" : "text-amber-300"}`}>{msg}</p>
-      )}
+      {msg ? (
+        <p
+          className={`text-sm ${
+            msg === "OK"
+              ? "text-[color:var(--accent)]"
+              : "text-[color:color-mix(in_oklab,var(--danger)_85%,var(--ink))]"
+          }`}
+        >
+          {msg}
+        </p>
+      ) : null}
       <div className="flex flex-wrap gap-2.5">
-        <BtnPrimary type="button" disabled={busy || task.status !== "published"} onClick={onAccept}>
+        <button type="button" disabled={busy || task.status !== "published"} onClick={onAccept} className={primaryBtn}>
           Accept task
-        </BtnPrimary>
+        </button>
         <button type="button" disabled={busy || task.status !== "submitted"} onClick={onVerify} className={outlineBtn}>
           Verify &amp; release
         </button>
       </div>
-      <form onSubmit={onSubmit} className="space-y-4 border-t border-az-stroke pt-5">
-        <label htmlFor={fileInputId} className="block text-sm font-medium text-az-muted-2">
+      <form onSubmit={onSubmit} className="space-y-4 border-t border-[color:var(--line)] pt-5">
+        <label htmlFor={fileInputId} className="block text-sm font-medium text-[color:var(--mute)]">
           Upload evidence (photo / file)
         </label>
         <div className="flex flex-wrap items-center gap-3">
@@ -151,17 +164,17 @@ function TaskDetailActionsInner({ task }: { task: TaskRow }) {
           />
           <label
             htmlFor={fileInputId}
-            className={`inline-flex h-11 cursor-pointer items-center rounded-[14px] border border-az-stroke-2 bg-white/[0.06] px-4 text-[13px] font-semibold text-az-text transition hover:border-[rgba(182,242,74,0.25)] hover:bg-white/[0.09] ${disabledEvidence ? "pointer-events-none opacity-45" : ""}`}
+            className={`${fileLabelBase} ${disabledEvidence ? "pointer-events-none opacity-45" : ""}`}
           >
             Choose file
           </label>
-          <span className="min-w-0 truncate text-xs text-az-muted">
+          <span className="min-w-0 truncate text-xs text-[color:var(--mute)]">
             {chosenFileName ?? "No file chosen"}
           </span>
         </div>
-        <BtnPrimary type="submit" disabled={disabledEvidence}>
+        <button type="submit" disabled={disabledEvidence} className={primaryBtn}>
           Submit evidence
-        </BtnPrimary>
+        </button>
       </form>
     </Card>
   );
@@ -172,10 +185,10 @@ export function TaskDetailActions({ task }: { task: TaskRow }) {
   const terminal = TERMINAL_STATUSES.has(task.status.toLowerCase());
   if (terminal) {
     return (
-      <Card className="mt-8 p-5">
-        <p className="text-sm text-az-muted-2">
+      <Card className="dashboard-reveal dashboard-reveal-d4 mt-8 p-5">
+        <p className="text-sm text-[color:var(--ink-2)]">
           No further lifecycle actions — status is{" "}
-          <span className="font-semibold capitalize text-az-text">{task.status.replace(/_/g, " ")}</span>.
+          <span className="font-semibold capitalize text-[color:var(--ink)]">{task.status.replace(/_/g, " ")}</span>.
           Use the settlement section above for amounts, timestamps, and opBNBScan transaction links.
         </p>
       </Card>
@@ -184,8 +197,8 @@ export function TaskDetailActions({ task }: { task: TaskRow }) {
 
   if (!configured) {
     return (
-      <Card className="mt-8 p-5">
-        <p className="text-sm text-az-muted-2">Configure Privy to enable accept / submit from the browser.</p>
+      <Card className="dashboard-reveal dashboard-reveal-d4 mt-8 p-5">
+        <p className="text-sm text-[color:var(--ink-2)]">Configure Privy to enable accept / submit from the browser.</p>
       </Card>
     );
   }
