@@ -26,6 +26,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Docs:** Root [`README.md`](README.md) — product summary, architecture (Mermaid), features, flows, stack (**Privy** + wagmi), **opBNB Testnet** contract addresses (from [`.contracts.env`](.contracts.env)), quick start (**`GET /health`**), deployment guidance; **does not link** to files under **`docs/`**.
+
 - **Frontend (`/tasks/[id]`):** Evidence preview treats **HEIC/HEIF** as download-first (no broken `<img>`); link label **Download / open** when applicable ([`TaskDetailActions`](frontend/components/TaskDetailActions.tsx)).
 
 - **Frontend (`/my-tasks`):** **[`MyTasksTable`](frontend/components/tasks/MyTasksTable.tsx)** adds a **Review** filter tab (**`awaiting_requester_review`**) with badge count, between **In progress** and **Completed** (Market-aligned).
