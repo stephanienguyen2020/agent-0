@@ -3,8 +3,11 @@
 #   emagents.verifier_worker | emagents.settlement | emagents.reputation
 # Start runs scripts/railway-worker-start.sh
 #
-# Repo root has no pyproject.toml, so Nixpacks "[...]" merges with an empty Python install — no
-# /opt/venv and no pip on PATH. Create the venv explicitly, then editable-install backend + agents.
+# Repo root has no pyproject.toml, so Nixpacks does not auto-install Python — `python3` is missing
+# on PATH until [phases.setup] adds it. Then create /opt/venv and editable-install backend + agents.
+
+[phases.setup]
+nixPkgs = ["...", "python311Full", "gcc"]
 
 [phases.install]
 cmds = [
