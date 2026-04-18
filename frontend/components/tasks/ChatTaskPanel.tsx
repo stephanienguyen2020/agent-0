@@ -368,36 +368,41 @@ export function ChatTaskPanel() {
       <div className="flex min-h-0 flex-col overflow-hidden">
         <div
           ref={listRef}
-          className="min-h-0 max-h-[min(48vh,420px)] space-y-3 overflow-y-auto rounded-[12px] px-3 py-4 sm:px-4"
+          className="flex h-[min(48vh,420px)] min-h-0 flex-col overflow-y-auto rounded-[12px] px-3 py-4 sm:px-4"
           style={{ background: "var(--bg-2)" }}
         >
           {messages.length === 0 ? (
-            <p className="text-sm" style={{ color: "var(--mute)" }}>
-              Describe the task you want on the market — bounty in USDC, deadline, and what executors should do.
-              {!authenticated ? " You can draft without a wallet; connect to publish." : null}
-            </p>
-          ) : null}
-          {messages.map((m, i) => (
-            <div
-              key={`${i}-${m.role}`}
-              className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
-            >
-              <div
-                className="max-w-[92%] rounded-[14px] px-4 py-2.5 text-sm leading-relaxed [text-wrap:pretty]"
-                style={{
-                  border: "1px solid var(--line)",
-                  background: m.role === "user" ? "color-mix(in oklab, var(--accent) 12%, var(--card))" : "var(--card)",
-                  color: "var(--ink)",
-                }}
-              >
-                {m.role === "user" ? (
-                  <span className="whitespace-pre-wrap">{m.content}</span>
-                ) : (
-                  <AssistantMessageBody content={m.content} />
-                )}
-              </div>
+            <div className="flex min-h-0 flex-1 flex-col justify-center">
+              <p className="text-sm [text-wrap:pretty]" style={{ color: "var(--mute)" }}>
+                Describe the task you want on the market — bounty in USDC, deadline, and what executors should do.
+                {!authenticated ? " You can draft without a wallet; connect to publish." : null}
+              </p>
             </div>
-          ))}
+          ) : (
+            <div className="space-y-3">
+              {messages.map((m, i) => (
+                <div
+                  key={`${i}-${m.role}`}
+                  className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
+                >
+                  <div
+                    className="max-w-[92%] rounded-[14px] px-4 py-2.5 text-sm leading-relaxed [text-wrap:pretty]"
+                    style={{
+                      border: "1px solid var(--line)",
+                      background: m.role === "user" ? "color-mix(in oklab, var(--accent) 12%, var(--card))" : "var(--card)",
+                      color: "var(--ink)",
+                    }}
+                  >
+                    {m.role === "user" ? (
+                      <span className="whitespace-pre-wrap">{m.content}</span>
+                    ) : (
+                      <AssistantMessageBody content={m.content} />
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="border-t pt-4 sm:pt-5" style={{ borderColor: "var(--line)" }}>
