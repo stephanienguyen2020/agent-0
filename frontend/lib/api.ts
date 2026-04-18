@@ -2,8 +2,6 @@ import { getApiBase } from "@/lib/api-base";
 import { ESCROW_FEE_BPS } from "@/lib/constants";
 import type { TaskApiRecord } from "@/lib/task-types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
 /** Basis points charged by deployed EMEscrow — use for EIP-3009 totals (fallback: `ESCROW_FEE_BPS`). */
 export async function getEscrowFeeBps(): Promise<number> {
   const r = await fetch(`${getApiBase()}/api/v1/tasks/escrow-fee-bps`, { cache: "no-store" });
@@ -72,14 +70,20 @@ export async function createTask(
   return JSON.parse(text) as CreateTaskResponse;
 }
 
-export async function fetchTasks() {
-  const r = await fetch(`${API_BASE}/api/v1/tasks`, { next: { revalidate: 15 } });
+export async function fetchTasks(opts?: { status?: string }) {
+  const base = getApiBase();
+  const params = new URLSearchParams();
+  if (opts?.status) params.set("status", opts.status);
+  const qs = params.toString();
+  const r = await fetch(`${base}/api/v1/tasks${qs ? `?${qs}` : ""}`, {
+    next: { revalidate: 15 },
+  });
   if (!r.ok) throw new Error("failed to load tasks");
   return r.json() as Promise<{ tasks: unknown[] }>;
 }
 
 export async function fetchTask(id: string): Promise<TaskApiRecord> {
-  const r = await fetch(`${API_BASE}/api/v1/tasks/${id}`, { cache: "no-store" });
+  const r = await fetch(`${getApiBase()}/api/v1/tasks/${id}`, { cache: "no-store" });
   if (!r.ok) throw new Error("task not found");
   return r.json() as Promise<TaskApiRecord>;
 }

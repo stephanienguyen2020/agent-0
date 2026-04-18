@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Landing (`/`):** loads published marketplace tasks via **`GET /api/v1/tasks?status=published`** (Execution Market uses status **`published`**, not legacy `open`/`pending`); **`fetchTasks`** and task reads use **`getApiBase()`** for consistent **`NEXT_PUBLIC_API_URL`** behavior. Hero stats show **`$0.00` / `0`** when the pool is legitimately empty, and **`—`** only when the fetch fails — plus an alert banner if the API is unreachable. Settlement strip, hero footer, and sidebar filters are **BNB-only** (no Solana); the BNB chip matches **`bnb`**, **`opbnb`**, **`bnbchain`**, **`5611`**, and unset **`chain`** from the API. Header **Connect wallet** uses **Privy** (**`LandingConnectWallet`**) instead of linking to **`/dashboard`**.
+
+### Added
+
+- **Frontend:** **`/skill-md`** (App Shell) renders **`frontend/content/skill-body.md`** with **`react-markdown`**; landing nav includes a **`skill.md`** link.
+
 ### Fixed
 
 - **Railway workers:** restored tracked **`agents/emagents/**`** Python sources (merged from **`dev`** / branch history) — deployment branches that omitted this tree caused **`ModuleNotFoundError: No module named 'emagents'`** at runtime after **`pip install -e ./agents`**. [docs/railway-deploy.md](docs/railway-deploy.md) §4.3 / §9 clarify per-service **`WORKER_MODULE`** (reputation ≠ **`verifier_worker`**).

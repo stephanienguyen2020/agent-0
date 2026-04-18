@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useEffect, useMemo } from "react";
 
 import { BrandMark } from "@/components/brand/BrandMark";
+import { LandingConnectWallet } from "@/components/landing/LandingConnectWallet";
 import type { ApiTask } from "./page";
 
 /** Monokai-style highlights for the integration code sample */
@@ -811,11 +812,21 @@ const CHAIN_LABELS_MAP: Record<string, string> = {
   opbnb: "opBNB",
 };
 
+/** Map API chain strings to sidebar filter ids (BNB / opBNB / empty → `bnb`). */
+function normalizeLandingChainKey(chain: string | undefined): string {
+  const c = chain?.trim().toLowerCase() ?? "";
+  if (!c || c === "bnb" || c === "bnbchain" || c === "opbnb" || c === "5611") {
+    return "bnb";
+  }
+  return c;
+}
+
 /* ─── main client component ──────────────────────────────────── */
 export function LandingClient({
   tasks,
   openCount,
   poolFormatted,
+  tasksLoadFailed,
   calendarYear,
   calendarMonth,
   calendarActiveDays,
@@ -824,6 +835,7 @@ export function LandingClient({
   tasks: ApiTask[];
   openCount: number;
   poolFormatted: string;
+  tasksLoadFailed: boolean;
   calendarYear: number;
   calendarMonth: number;
   calendarActiveDays: number[];
@@ -861,11 +873,10 @@ export function LandingClient({
   const filtered = tasks.filter((t) => {
     if (filterCats.length && !filterCats.includes(t.category?.toLowerCase()))
       return false;
-    if (
-      filterChains.length &&
-      !filterChains.includes(t.chain?.toLowerCase() ?? "")
-    )
-      return false;
+    if (filterChains.length) {
+      const chainKey = normalizeLandingChainKey(t.chain);
+      if (!filterChains.includes(chainKey)) return false;
+    }
     if (filterQ) {
       const q = filterQ.toLowerCase();
       if (
@@ -942,6 +953,7 @@ export function LandingClient({
               </Link>
               <Link href="/agents">Agents</Link>
               <Link href="/leaderboard">Leaderboard</Link>
+              <Link href="/skill-md">skill.md</Link>
               <a style={{ color: "var(--mute)", cursor: "default" }}>Docs</a>
             </nav>
             <div style={{ flex: 1 }} />
@@ -973,20 +985,7 @@ export function LandingClient({
               </span>
             </div>
             <ThemeToggle />
-            <Link
-              href="/dashboard"
-              className="btn"
-              style={{
-                border: "1px solid var(--line)",
-                background: "transparent",
-                borderRadius: 999,
-                padding: "8px 14px",
-                fontSize: 13,
-                whiteSpace: "nowrap",
-              }}
-            >
-              Connect wallet
-            </Link>
+            <LandingConnectWallet />
             <Link
               href="/tasks/new"
               className="btn"
@@ -1005,6 +1004,26 @@ export function LandingClient({
             </Link>
           </div>
         </header>
+
+        {tasksLoadFailed ? (
+          <div
+            role="alert"
+            style={{
+              borderBottom: "1px solid var(--line)",
+              background: "color-mix(in oklab, var(--accent-2) 8%, var(--card))",
+              padding: "12px 32px",
+              fontSize: 13,
+              lineHeight: 1.5,
+              color: "var(--ink-2)",
+            }}
+          >
+            Could not load tasks from the API. Set{" "}
+            <span className="mono" style={{ fontSize: 12 }}>
+              NEXT_PUBLIC_API_URL
+            </span>{" "}
+            and run the backend, or try again shortly.
+          </div>
+        ) : null}
 
         {/* ── ticker ────────────────────────────────────────────── */}
         <Ticker tasks={tasks} />
@@ -1111,13 +1130,27 @@ export function LandingClient({
             >
               <StatRow
                 label="Open bounty pool"
-                value={openCount > 0 ? poolFormatted : "—"}
-                sub={openCount > 0 ? "across open tasks" : "no tasks yet"}
+                value={
+                  tasksLoadFailed ? "—" : openCount > 0 ? poolFormatted : "$0.00"
+                }
+                sub={
+                  tasksLoadFailed
+                    ? "could not load market data"
+                    : openCount > 0
+                      ? "across open tasks"
+                      : "no tasks yet"
+                }
               />
               <StatRow
                 label="Open tasks"
-                value={openCount > 0 ? String(openCount) : "—"}
-                sub="live right now"
+                value={
+                  tasksLoadFailed ? "—" : openCount > 0 ? String(openCount) : "0"
+                }
+                sub={
+                  tasksLoadFailed
+                    ? "check API configuration"
+                    : "live right now"
+                }
               />
               <StatRow
                 label="Median release"
@@ -1138,7 +1171,7 @@ export function LandingClient({
                   color: "var(--mute)",
                 }}
               >
-                BNB · Solana · x402 + EIP-3009 · ERC-8004 reputation
+                BNB · x402 + EIP-3009 · ERC-8004 reputation
               </div>
             </aside>
           </div>
@@ -1171,10 +1204,7 @@ export function LandingClient({
             <div
               style={{ display: "flex", gap: 18, flexWrap: "wrap", flex: 1 }}
             >
-              {[
-                { name: "BNB", color: "#f0b90b" },
-                { name: "Solana", color: "#9945ff" },
-              ].map((c) => (
+              {[{ name: "BNB", color: "#f0b90b" }].map((c) => (
                 <div
                   key={c.name}
                   style={{
@@ -1441,10 +1471,7 @@ export function LandingClient({
                         className="mono"
                         style={{ fontSize: 11, opacity: 0.5 }}
                       >
-                        {
-                          tasks.filter((t) => t.category?.toLowerCase() === id)
-                            .length
-                        }
+                        {tasks.filter((t) => t.category?.toLowerCase() === id).length}
                       </span>
                     </button>
                   );
@@ -1472,11 +1499,11 @@ export function LandingClient({
                   marginBottom: 22,
                 }}
               >
-                {[
-                  { id: "bnb", name: "BNB", color: "#f0b90b" },
-                  { id: "solana", name: "Solana", color: "#9945ff" },
-                ].map((c) => {
+                {[{ id: "bnb", name: "BNB", color: "#f0b90b" }].map((c) => {
                   const on = filterChains.includes(c.id);
+                  const chainCount = tasks.filter(
+                    (t) => normalizeLandingChainKey(t.chain) === c.id,
+                  ).length;
                   return (
                     <button
                       key={c.id}
@@ -1493,6 +1520,7 @@ export function LandingClient({
                         fontSize: 12,
                         cursor: "pointer",
                         fontFamily: "inherit",
+                        minWidth: 0,
                       }}
                     >
                       <span
@@ -1505,7 +1533,10 @@ export function LandingClient({
                           flexShrink: 0,
                         }}
                       />
-                      {c.name}
+                      <span style={{ flex: 1, textAlign: "left" }}>{c.name}</span>
+                      <span className="mono" style={{ fontSize: 11, opacity: 0.5 }}>
+                        {chainCount}
+                      </span>
                     </button>
                   );
                 })}

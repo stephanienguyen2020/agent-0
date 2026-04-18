@@ -33,16 +33,17 @@ function calendarDaysWithTasks(tasks: ApiTask[], year: number, month: number): n
 export default async function LandingPage() {
   let tasks: ApiTask[] = [];
   let totalPool = 0;
+  let tasksLoadFailed = false;
 
   try {
-    const data = await fetchTasks();
-    tasks = (data.tasks as ApiTask[]).filter((t) => t.status === "open" || t.status === "pending");
+    const data = await fetchTasks({ status: "published" });
+    tasks = data.tasks as ApiTask[];
     totalPool = tasks.reduce((sum, t) => {
       const n = typeof t.bounty_micros === "string" ? Number(t.bounty_micros) : (t.bounty_micros ?? 0);
       return sum + (Number.isFinite(n) ? n : 0);
     }, 0);
   } catch {
-    /* API offline — render with empty state */
+    tasksLoadFailed = true;
   }
 
   const openCount = tasks.length;
@@ -66,6 +67,7 @@ export default async function LandingPage() {
       tasks={tasks.slice(0, 12)}
       openCount={openCount}
       poolFormatted={poolFormatted}
+      tasksLoadFailed={tasksLoadFailed}
       calendarYear={calendarYear}
       calendarMonth={calendarMonth}
       calendarActiveDays={calendarActiveDays}
