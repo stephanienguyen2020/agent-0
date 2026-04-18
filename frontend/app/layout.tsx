@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
-import { JetBrains_Mono, Manrope } from "next/font/google";
+import { Instrument_Serif, JetBrains_Mono, Manrope } from "next/font/google";
 
-import { AppShell } from "@/components/shell/AppShell";
 import { Providers } from "./providers";
 import "./globals.css";
 
@@ -17,22 +16,35 @@ const jetbrains = JetBrains_Mono({
   display: "swap",
 });
 
+const instrumentSerif = Instrument_Serif({
+  weight: "400",
+  subsets: ["latin"],
+  variable: "--font-instrument-serif",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
-  title: "AgentZero — Execution Market",
-  description: "Universal execution layer for humans, agents, and robots",
+  title: "AgentZero — Agent Zero",
+  description: " for humans, agents, and robots",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html
       lang="en"
-      className={`${manrope.variable} ${jetbrains.variable}`}
+      data-theme="dark"
+      className={`${manrope.variable} ${jetbrains.variable} ${instrumentSerif.variable}`}
       suppressHydrationWarning
     >
-      <body className="min-h-screen font-sans antialiased" suppressHydrationWarning>
-        <Providers>
-          <AppShell>{children}</AppShell>
-        </Providers>
+      <body
+        className="min-h-screen font-sans antialiased"
+        suppressHydrationWarning
+      >
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

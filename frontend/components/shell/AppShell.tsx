@@ -1,6 +1,6 @@
 import { fetchTasks } from "@/lib/api";
 
-import { Sidebar } from "@/components/shell/Sidebar";
+import { AppShellClient } from "@/components/shell/AppShellClient";
 
 export async function AppShell({ children }: { children: React.ReactNode }) {
   let marketCount: number | undefined;
@@ -11,10 +11,5 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
     marketCount = undefined;
   }
 
-  return (
-    <div className="flex min-h-screen">
-      <Sidebar marketCount={marketCount} />
-      <div className="min-w-0 flex-1 px-6 py-7 sm:px-8">{children}</div>
-    </div>
-  );
+  return <AppShellClient marketCount={marketCount}>{children}</AppShellClient>;
 }

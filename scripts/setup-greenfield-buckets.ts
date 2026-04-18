@@ -1,5 +1,5 @@
 /**
- * Create Execution Market buckets on Greenfield testnet (once per environment).
+ * Create Agent Zero buckets on Greenfield testnet (once per environment).
  * Run: npm run setup-greenfield-buckets
  *
  * Requires: DEPLOYER_PRIVATE_KEY, tBNB on Greenfield testnet for gas.
@@ -8,7 +8,10 @@ import * as path from "path";
 import { fileURLToPath } from "url";
 import * as dotenv from "dotenv";
 import { privateKeyToAccount } from "viem/accounts";
-import { loadGreenfieldSdk, pickPrimarySp } from "./lib/greenfield-bootstrap.js";
+import {
+  loadGreenfieldSdk,
+  pickPrimarySp,
+} from "./lib/greenfield-bootstrap.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

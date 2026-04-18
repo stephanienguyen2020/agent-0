@@ -31,7 +31,7 @@ def _load_repo_env() -> None:
 
 _load_repo_env()
 
-app = FastAPI(title="Execution Market x402 Facilitator", version="0.1.0")
+app = FastAPI(title="Agent Zero x402 Facilitator", version="0.1.0")
 
 RPC_URL = os.environ.get("OPBNB_RPC") or os.environ.get("OPBNB_RPC_URL", "https://opbnb-testnet-rpc.bnbchain.org")
 CHAIN_ID = int(os.environ.get("CHAIN_ID", "5611"))

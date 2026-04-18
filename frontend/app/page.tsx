@@ -1,35 +1,75 @@
-import Link from "next/link";
+import { fetchTasks } from "@/lib/api";
+import { LandingClient } from "./LandingClient";
 
-import { DashboardHome } from "@/components/dashboard/DashboardHome";
-import { Topbar } from "@/components/shell/Topbar";
+export const revalidate = 15;
 
-export default function HomePage() {
+export type ApiTask = {
+  task_id: string | number;
+  title: string;
+  category: string;
+  status: string;
+  bounty_micros?: string | number;
+  instructions?: string;
+  created_at?: string;
+  deadline_at?: string;
+  chain?: string;
+  city?: string;
+};
+
+function calendarDaysWithTasks(tasks: ApiTask[], year: number, month: number): number[] {
+  const days = new Set<number>();
+  for (const t of tasks) {
+    const raw = t.deadline_at ?? t.created_at;
+    if (!raw) continue;
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) continue;
+    if (d.getFullYear() === year && d.getMonth() === month) {
+      days.add(d.getDate());
+    }
+  }
+  return Array.from(days).sort((a, b) => a - b);
+}
+
+export default async function LandingPage() {
+  let tasks: ApiTask[] = [];
+  let totalPool = 0;
+
+  try {
+    const data = await fetchTasks();
+    tasks = (data.tasks as ApiTask[]).filter((t) => t.status === "open" || t.status === "pending");
+    totalPool = tasks.reduce((sum, t) => {
+      const n = typeof t.bounty_micros === "string" ? Number(t.bounty_micros) : (t.bounty_micros ?? 0);
+      return sum + (Number.isFinite(n) ? n : 0);
+    }, 0);
+  } catch {
+    /* API offline — render with empty state */
+  }
+
+  const openCount = tasks.length;
+  const poolFormatted = totalPool >= 1_000_000_000
+    ? `$${(totalPool / 1_000_000_000).toFixed(1)}K`
+    : totalPool >= 1_000_000
+    ? `$${(totalPool / 1_000_000).toFixed(0)}`
+    : `$${(totalPool / 1_000_000).toFixed(2)}`;
+
+  const now = new Date();
+  const calendarYear = now.getFullYear();
+  const calendarMonth = now.getMonth();
+  const calendarActiveDays = calendarDaysWithTasks(tasks, calendarYear, calendarMonth);
+  const calendarTodayDay =
+    now.getFullYear() === calendarYear && now.getMonth() === calendarMonth
+      ? now.getDate()
+      : null;
+
   return (
-    <div>
-      <Topbar title="Dashboard" />
-      <div className="mb-10 max-w-3xl space-y-4 rounded-az border border-az-stroke-2 bg-white/[0.02] p-6 az-animate-fade-up">
-        <p className="text-sm font-medium text-[#cdf56a]">Everyone executes for everyone</p>
-        <p className="text-sm leading-relaxed text-az-muted-2">
-          Publish and complete tasks across humans, AI agents, and robots — with escrow on opBNB, evidence on
-          Greenfield, and identity on ERC-8004.
-        </p>
-        <div className="flex flex-wrap gap-3">
-          <Link
-            href="/tasks"
-            className="inline-flex h-11 items-center gap-2 rounded-[14px] bg-az-btn-green px-5 text-[13px] font-bold text-[#0d1a0f] shadow-az-btn-green transition hover:-translate-y-px hover:shadow-[0_12px_30px_-8px_rgba(180,240,90,0.55)]"
-          >
-            Browse market
-          </Link>
-          <Link
-            href="/register"
-            className="inline-flex h-11 items-center rounded-[14px] border border-az-stroke-2 px-5 text-[13px] font-semibold text-az-text transition hover:bg-white/[0.06]"
-          >
-            Register as executor
-          </Link>
-        </div>
-      </div>
-
-      <DashboardHome />
-    </div>
+    <LandingClient
+      tasks={tasks.slice(0, 12)}
+      openCount={openCount}
+      poolFormatted={poolFormatted}
+      calendarYear={calendarYear}
+      calendarMonth={calendarMonth}
+      calendarActiveDays={calendarActiveDays}
+      calendarTodayDay={calendarTodayDay}
+    />
   );
 }

@@ -1,5 +1,5 @@
 {
-  "name": "Execution Market Platform",
-  "description": "Universal execution layer orchestrator",
+  "name": "Agent Zero Platform",
+  "description": " orchestrator",
   "capabilities": ["tasks.publish", "tasks.settle", "irc.relay"]
 }

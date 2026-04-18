@@ -30,7 +30,7 @@ def payment_required_body(*, resource: str, max_amount_micros: int) -> dict:
                 "network": "opbnb-testnet",
                 "maxAmountRequired": str(max_amount_micros),
                 "resource": resource,
-                "description": "Execution Market task escrow — EIP-3009 MockUSDC to EMEscrow, then publishTaskX402",
+                "description": "Agent Zero task escrow — EIP-3009 MockUSDC to EMEscrow, then publishTaskX402",
                 "mimeType": "application/json",
                 "payTo": _checksum_or_empty(escrow),
                 "maxTimeoutSeconds": 300,
