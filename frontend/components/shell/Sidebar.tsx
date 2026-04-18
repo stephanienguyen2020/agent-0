@@ -192,29 +192,21 @@ export function Sidebar({ marketCount }: { marketCount?: number }) {
       </div>
       <div className="flex flex-col gap-0.5">
         <Link
-          href="/register"
+          href="/verification"
           className="sidebar-nav-link border border-transparent"
-          data-active={activePrefix("/register") ? "true" : undefined}
-          title="Register"
+          data-active={
+            activePrefix("/verification") || activePrefix("/register") ? "true" : undefined
+          }
+          title="World ID"
           onClick={() => chrome?.setMobileNavOpen(false)}
         >
           <IconShield className="h-4 w-4 shrink-0 opacity-90" />
-          <span className="sidebar-nav-text">Register</span>
+          <span className="sidebar-nav-text">World ID</span>
         </Link>
         <span className="sidebar-nav-link cursor-not-allowed opacity-[0.55]" title="IRC channels (soon)">
           <IconLink className="h-4 w-4 shrink-0 opacity-90" />
           <span className="sidebar-nav-text">IRC Channels</span>
         </span>
-        <Link
-          href="/verification"
-          className="sidebar-nav-link border border-transparent"
-          data-active={activePrefix("/verification") ? "true" : undefined}
-          title="Verification"
-          onClick={() => chrome?.setMobileNavOpen(false)}
-        >
-          <IconShield className="h-4 w-4 shrink-0 opacity-90" />
-          <span className="sidebar-nav-text">Verification</span>
-        </Link>
       </div>
 
       <div className="mt-auto border-t border-[color:var(--ed-line)] pt-4">

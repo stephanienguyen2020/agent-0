@@ -62,9 +62,10 @@ export default async function LandingPage() {
       ? now.getDate()
       : null;
 
+  /** Full published list — needed for sidebar category/chain counts and filtering (not capped at 12). */
   return (
     <LandingClient
-      tasks={tasks.slice(0, 12)}
+      tasks={tasks}
       openCount={openCount}
       poolFormatted={poolFormatted}
       tasksLoadFailed={tasksLoadFailed}

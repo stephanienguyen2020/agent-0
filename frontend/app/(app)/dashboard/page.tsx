@@ -43,7 +43,7 @@ export default function HomePage() {
               </span>
             </Link>
             <Link
-              href="/register"
+              href="/verification"
               className="dashboard-btn inline-flex h-11 items-center rounded-full border border-[color:var(--line)] bg-transparent px-[22px] text-[13px] font-semibold text-[color:var(--ink)] hover:bg-[color:var(--bg-2)]"
             >
               Register as executor

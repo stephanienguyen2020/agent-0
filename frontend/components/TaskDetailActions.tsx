@@ -3,6 +3,8 @@
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { useRouter } from "next/navigation";
 import { useCallback, useId, useState, type FormEvent } from "react";
+
+import type { TaskEvidenceItem } from "@/lib/task-types";
 import { getAddress } from "viem";
 import { useAccount } from "wagmi";
 
@@ -18,6 +20,7 @@ type TaskRow = {
   requester_wallet?: string;
   executor_wallet?: string;
   requester_approval_before_verify?: boolean;
+  evidence_items?: TaskEvidenceItem[];
 };
 
 const primaryBtn =
@@ -45,6 +48,116 @@ function walletsEqual(a: string | undefined, b: string | undefined): boolean {
   } catch {
     return a.toLowerCase() === b.toLowerCase();
   }
+}
+
+function submittedEvidenceCaption(item: TaskEvidenceItem): string | null {
+  const parts: string[] = [];
+  if (item.exif_gps_lat != null && item.exif_gps_lng != null) {
+    parts.push(`${Number(item.exif_gps_lat).toFixed(5)}, ${Number(item.exif_gps_lng).toFixed(5)}`);
+  }
+  if (item.exif_timestamp) {
+    parts.push(String(item.exif_timestamp));
+  }
+  return parts.length ? parts.join(" · ") : null;
+}
+
+function EvidenceItemCard({ item }: { item: TaskEvidenceItem }) {
+  const [imgErr, setImgErr] = useState(false);
+  const ct = (item.content_type || "").toLowerCase();
+  const fn = item.filename || "evidence";
+  const isPdf = ct.includes("pdf") || fn.toLowerCase().endsWith(".pdf");
+  const isImg =
+    !isPdf &&
+    (ct.startsWith("image/") ||
+      /\.(jpe?g|png|gif|webp|bmp|svg)(\?|$)/i.test(item.greenfield_url));
+
+  const cap = submittedEvidenceCaption(item);
+  const linkCls =
+    "text-[13px] font-semibold text-[color:var(--accent)] underline underline-offset-2 hover:text-[color:var(--ink)]";
+
+  const shell = "rounded-xl border border-[color:var(--line)] bg-[color:var(--bg-2)] p-4";
+
+  if (isPdf) {
+    return (
+      <div className={shell}>
+        <p className="truncate text-sm font-medium text-[color:var(--ink)]">{fn}</p>
+        {cap ? <p className="mt-1 text-xs text-[color:var(--mute)]">{cap}</p> : null}
+        <a
+          href={item.greenfield_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`${linkCls} mt-2 inline-block`}
+        >
+          Open PDF
+        </a>
+      </div>
+    );
+  }
+
+  if (isImg && !imgErr) {
+    return (
+      <div className={`${shell} overflow-hidden p-0`}>
+        <a
+          href={item.greenfield_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block bg-black/10"
+        >
+          {/* External storage URL (Greenfield / dev placeholder); not bundled assets. */}
+          {/* eslint-disable-next-line @next/next/no-img-element -- remote signed URLs; domains not in next.config */}
+          <img
+            src={item.greenfield_url}
+            alt=""
+            className="max-h-64 w-full object-contain"
+            loading="lazy"
+            onError={() => setImgErr(true)}
+          />
+        </a>
+        <div className="px-4 py-3">
+          <p className="truncate text-xs text-[color:var(--mute)]">{fn}</p>
+          {cap ? <p className="mt-1 text-xs text-[color:var(--mute)]">{cap}</p> : null}
+          <a
+            href={item.greenfield_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`${linkCls} mt-1 inline-block`}
+          >
+            Open full size
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={shell}>
+      <p className="truncate text-sm font-medium text-[color:var(--ink)]">{fn}</p>
+      {cap ? <p className="mt-1 text-xs text-[color:var(--mute)]">{cap}</p> : null}
+      <a
+        href={item.greenfield_url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`${linkCls} mt-2 inline-block`}
+      >
+        Open file
+      </a>
+    </div>
+  );
+}
+
+function SubmittedEvidenceSection({ items }: { items: TaskEvidenceItem[] }) {
+  return (
+    <div className="space-y-3">
+      <h3 className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--mute)]">
+        Submitted evidence
+      </h3>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {items.map((item, i) => (
+          <EvidenceItemCard key={`${item.greenfield_url}-${item.item_index}-${i}`} item={item} />
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function TaskDetailActionsInner({ task }: { task: TaskRow }) {
@@ -177,6 +290,10 @@ function TaskDetailActionsInner({ task }: { task: TaskRow }) {
         >
           {msg}
         </p>
+      ) : null}
+
+      {task.evidence_items && task.evidence_items.length > 0 ? (
+        <SubmittedEvidenceSection items={task.evidence_items} />
       ) : null}
 
       {awaitingReview ? (

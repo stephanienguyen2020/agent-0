@@ -5,7 +5,7 @@ import { deviceLegacy, orbLegacy } from "@worldcoin/idkit-core";
 import type { IDKitResult, RpContext } from "@worldcoin/idkit-core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAddress } from "viem";
 import { useAccount } from "wagmi";
 
@@ -13,20 +13,15 @@ import { usePrivyConfigured } from "@/app/providers";
 import { BtnPrimary } from "@/components/ui/Button";
 import { fetchWorldIdStatus, postWorldIdVerify } from "@/lib/api";
 
-function shortAddr(a: string) {
-  if (a.length < 14) return a;
-  return `${a.slice(0, 8)}…${a.slice(-6)}`;
-}
-
-function chipClass(active: boolean, disabled?: boolean) {
-  if (disabled) {
-    return "cursor-not-allowed rounded-[14px] border border-az-stroke-2 bg-white/[0.02] px-4 py-2.5 text-xs font-semibold text-az-muted-2 opacity-45 sm:text-[13px]";
+/** Next verification uses Device when false, Orb when true (only one "active" accent at a time). */
+function levelChipClass(completed: boolean, activeNext: boolean) {
+  if (completed) {
+    return "cursor-not-allowed rounded-[14px] border border-sky-500/35 bg-sky-500/10 px-4 py-2.5 text-xs font-semibold text-sky-100 sm:text-[13px]";
   }
-  return `rounded-[14px] border px-4 py-2.5 text-xs font-semibold transition sm:text-[13px] ${
-    active
-      ? "border-[rgba(182,242,74,0.3)] bg-[rgba(182,242,74,0.06)] text-[#cdf56a]"
-      : "border-az-stroke-2 bg-white/[0.04] text-az-muted-2 hover:border-white/[0.15] hover:text-az-text"
-  }`;
+  if (activeNext) {
+    return "rounded-[14px] border border-[rgba(182,242,74,0.3)] bg-[rgba(182,242,74,0.06)] px-4 py-2.5 text-xs font-semibold text-[#cdf56a] transition sm:text-[13px]";
+  }
+  return "rounded-[14px] border border-az-stroke-2 bg-white/[0.04] px-4 py-2.5 text-xs font-semibold text-az-muted-2 transition hover:border-white/[0.15] hover:text-az-text sm:text-[13px]";
 }
 
 function RegisterFlowInner() {
@@ -41,6 +36,8 @@ function RegisterFlowInner() {
   const [boundSignal, setBoundSignal] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
+  /** IDKit can invoke onSuccess/handleVerify twice in quick succession; only one POST may run. */
+  const verifyInFlightRef = useRef(false);
 
   const appId = process.env.NEXT_PUBLIC_WORLD_ID_APP_ID as
     | `app_${string}`
@@ -76,6 +73,7 @@ function RegisterFlowInner() {
     setOrbMode(false);
   }, [normalizedWallet]);
 
+  /** After Device verification, default Orb as the next flow (upgrade); Orb tier keeps Orb selected. */
   useEffect(() => {
     if (level === "device" || level === "orb") {
       setOrbMode(true);
@@ -153,16 +151,37 @@ function RegisterFlowInner() {
         setErr("Invalid wallet address for World ID signal.");
         return;
       }
-      await postWorldIdVerify({ wallet: normalized, idkit_result: result });
-      setOk(
-        "Verified — you can accept tasks (Orb required for high bounties).",
-      );
-      setOpen(false);
-      setBoundSignal(null);
-      if (normalizedWallet) {
-        await queryClient.invalidateQueries({
-          queryKey: ["world-id-status", normalizedWallet],
-        });
+      if (verifyInFlightRef.current) {
+        return;
+      }
+      verifyInFlightRef.current = true;
+      setErr(null);
+      setOk(null);
+      try {
+        await postWorldIdVerify({ wallet: normalized, idkit_result: result });
+        setOk(
+          "Verified — you can accept tasks (Orb required for high bounties).",
+        );
+        setOpen(false);
+        setBoundSignal(null);
+        if (normalizedWallet) {
+          await queryClient.invalidateQueries({
+            queryKey: ["world-id-status", normalizedWallet],
+          });
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        const lower = msg.toLowerCase();
+        if (lower.includes("nullifier") && lower.includes("another")) {
+          setErr(
+            "This World ID is already linked to a different wallet in our records. Connect the wallet you used when you first verified on this app, then try again.",
+          );
+        } else {
+          setErr(msg);
+        }
+        setOpen(false);
+      } finally {
+        verifyInFlightRef.current = false;
       }
     },
     [boundSignal, normalizedWallet, queryClient, wallet],
@@ -184,8 +203,13 @@ function RegisterFlowInner() {
   const verifyDisabled =
     (!orbMode && hasDeviceOrHigher) || (orbMode && hasOrb);
 
+  const deviceCompleted = hasDeviceOrHigher;
+  const orbCompleted = hasOrb;
+  const deviceActiveNext = !deviceCompleted && !orbMode;
+  const orbActiveNext = !orbCompleted && orbMode;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" id="world-id-verify">
       {hasDeviceOrHigher && (
         <div className="rounded-[14px] border border-sky-500/35 bg-sky-500/10 px-4 py-3 text-sm text-sky-100">
           {hasOrb
@@ -212,23 +236,27 @@ function RegisterFlowInner() {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            disabled={hasDeviceOrHigher}
-            className={chipClass(!orbMode, hasDeviceOrHigher)}
+            disabled={deviceCompleted}
+            className={levelChipClass(deviceCompleted, deviceActiveNext)}
             onClick={() => {
-              if (!hasDeviceOrHigher) setOrbMode(false);
+              if (!deviceCompleted) setOrbMode(false);
             }}
           >
-            Device
+            {deviceCompleted ? "Device · done" : "Device"}
           </button>
           <button
             type="button"
-            disabled={hasOrb}
-            className={chipClass(orbMode, hasOrb)}
+            disabled={orbCompleted}
+            className={levelChipClass(orbCompleted, orbActiveNext)}
             onClick={() => {
-              if (!hasOrb) setOrbMode(true);
+              if (!orbCompleted) setOrbMode(true);
             }}
           >
-            Orb (high-bounty tasks)
+            {orbCompleted
+              ? "Orb · done"
+              : level === "device"
+                ? "Orb (upgrade)"
+                : "Orb (high-bounty tasks)"}
           </button>
         </div>
       </div>

@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useState, useEffect, useMemo } from "react";
 
-import { BrandMark } from "@/components/brand/BrandMark";
+import { LandingLogoLink } from "@/components/brand/LandingLogoLink";
 import { LandingConnectWallet } from "@/components/landing/LandingConnectWallet";
+import { formatCategoryLabel } from "@/lib/task-styles";
 import type { ApiTask } from "./page";
 
 /** Monokai-style highlights for the integration code sample */
@@ -167,14 +168,16 @@ const CSS = `
 `;
 
 /* ─── helpers ────────────────────────────────────────────────── */
+/** Keys match `tasks.category` from the API (snake_case). */
 const CATEGORIES: Record<string, { label: string; glyph: string }> = {
-  presence: { label: "Physical presence", glyph: "◉" },
-  knowledge: { label: "Knowledge access", glyph: "▤" },
-  authority: { label: "Human authority", glyph: "✱" },
-  action: { label: "Simple action", glyph: "→" },
-  hybrid: { label: "Digital–physical", glyph: "◐" },
-  verify: { label: "Verification", glyph: "✓" },
-  data: { label: "Data collection", glyph: "▦" },
+  physical_presence: { label: "Physical presence", glyph: "◉" },
+  knowledge_access: { label: "Knowledge access", glyph: "▤" },
+  human_authority: { label: "Human authority", glyph: "✱" },
+  simple_action: { label: "Simple action", glyph: "→" },
+  digital_physical: { label: "Digital–physical", glyph: "◐" },
+  agent_to_agent: { label: "Agent to agent", glyph: "◐" },
+  verification: { label: "Verification", glyph: "✓" },
+  data_collection: { label: "Data collection", glyph: "▦" },
   creative: { label: "Creative", glyph: "✦" },
 };
 
@@ -252,7 +255,12 @@ function timeAgo(isoString?: string): string {
 
 function catInfo(category: string) {
   const key = category?.toLowerCase();
-  return CATEGORIES[key] ?? { label: category, glyph: "◉" };
+  return (
+    CATEGORIES[key] ?? {
+      label: category ? formatCategoryLabel(category) : "Task",
+      glyph: "◉",
+    }
+  );
 }
 
 /* ─── theme toggle ───────────────────────────────────────────── */
@@ -322,25 +330,6 @@ function ThemeToggle() {
           ))}
       </svg>
     </button>
-  );
-}
-
-/* ─── logo ───────────────────────────────────────────────────── */
-function Logo() {
-  return (
-    <Link
-      href="/"
-      style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0, color: "var(--ink)" }}
-    >
-      <BrandMark className="h-[22px] w-[22px] shrink-0" />
-      <div style={{ lineHeight: 1 }}>
-        <div
-          style={{ fontWeight: 600, letterSpacing: "-0.01em", fontSize: 15 }}
-        >
-          Agent<span style={{ color: "var(--mute)" }}>.</span>Zero
-        </div>
-      </div>
-    </Link>
   );
 }
 
@@ -943,7 +932,7 @@ export function LandingClient({
               gap: 20,
             }}
           >
-            <Logo />
+            <LandingLogoLink />
             <nav className="nav-links">
               <Link
                 href="/tasks"
@@ -1104,7 +1093,7 @@ export function LandingClient({
                   Browse open tasks ↓
                 </Link>
                 <Link
-                  href="/register"
+                  href="/verification"
                   className="btn"
                   style={{
                     border: "1px solid var(--line)",
@@ -2666,7 +2655,7 @@ export function LandingClient({
                 gap: 16,
               }}
             >
-              <Logo />
+              <LandingLogoLink />
               <div
                 className="mono footer-links"
                 style={{
@@ -2680,7 +2669,7 @@ export function LandingClient({
                 <Link href="/tasks">Market</Link>
                 <Link href="/agents">Agents</Link>
                 <Link href="/leaderboard">Leaderboard</Link>
-                <Link href="/register">Register</Link>
+                <Link href="/verification">World ID</Link>
                 <Link href="/dashboard">Dashboard</Link>
               </div>
               <div

@@ -525,7 +525,7 @@ def accept_task(task_id: str, body: TaskAcceptBody, chain=Depends(get_chain)) ->
             if not level:
                 raise HTTPException(
                     403,
-                    "World ID verification required before accepting tasks (complete /register)",
+                    "World ID verification required before accepting tasks (complete /verification)",
                 )
             min_w = str(task_row.get("min_world_id_level") or "none").lower()
             if min_w == "device" and level not in ("device", "orb"):
@@ -1058,4 +1058,45 @@ def get_task(task_id: str) -> dict:
         er = supa.table("executors").select("wallet").eq("id", str(eid)).single().execute()
         if er.data:
             row["executor_wallet"] = er.data.get("wallet")
+
+    evidence_items_out: list[dict[str, Any]] = []
+    ev_latest = (
+        supa.table("evidence")
+        .select("id")
+        .eq("task_id", task_id)
+        .order("submitted_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if ev_latest.data:
+        ev_pk = ev_latest.data[0].get("id")
+        if ev_pk:
+            items_r = (
+                supa.table("evidence_items")
+                .select(
+                    "item_index,filename,content_type,greenfield_url,exif_gps_lat,exif_gps_lng,exif_timestamp"
+                )
+                .eq("evidence_id", str(ev_pk))
+                .order("item_index")
+                .execute()
+            )
+            for it in items_r.data or []:
+                url = it.get("greenfield_url")
+                if not url:
+                    continue
+                item: dict[str, Any] = {
+                    "item_index": it.get("item_index", 0),
+                    "filename": it.get("filename") or "evidence",
+                    "content_type": it.get("content_type") or "application/octet-stream",
+                    "greenfield_url": str(url),
+                }
+                if it.get("exif_gps_lat") is not None:
+                    item["exif_gps_lat"] = it["exif_gps_lat"]
+                if it.get("exif_gps_lng") is not None:
+                    item["exif_gps_lng"] = it["exif_gps_lng"]
+                ts = it.get("exif_timestamp")
+                if ts is not None:
+                    item["exif_timestamp"] = ts if isinstance(ts, str) else str(ts)
+                evidence_items_out.append(item)
+    row["evidence_items"] = evidence_items_out
     return row

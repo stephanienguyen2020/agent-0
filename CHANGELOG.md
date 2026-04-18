@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Frontend (`/my-tasks`):** **[`MyTasksTable`](frontend/components/tasks/MyTasksTable.tsx)** adds a **Review** filter tab (**`awaiting_requester_review`**) with badge count, between **In progress** and **Completed** (Market-aligned).
+
+- **Frontend (landing `/`):** **[`LandingClient`](frontend/app/LandingClient.tsx)** receives the **full** published task list from **[`page.tsx`](frontend/app/page.tsx)** (no **`slice(0, 12)`** cap). Sidebar **Category** rails use keys that match **`tasks.category`** from the API (**`physical_presence`**, **`knowledge_access`**, **`human_authority`**, **`simple_action`**, **`digital_physical`**, **`agent_to_agent`**, **`verification`**, **`data_collection`**, **`creative`**) so counts and filters align with **`GET /api/v1/tasks?status=published`**; **`catInfo`** falls back to **`formatCategoryLabel`** for unknown categories.
+
+- **API / task detail:** **`GET /api/v1/tasks/{task_id}`** attaches **`evidence_items`** from the latest **`evidence`** submission (**`greenfield_url`**, **`filename`**, **`content_type`**, optional EXIF). **[`TaskDetailActions`](frontend/components/TaskDetailActions.tsx)** renders **Submitted evidence** (image preview, **Open PDF**, or **Open file**) above the approval banner so the publisher can review before **Approve evidence**.
+
+- **Frontend (auth routing):** All **`(app)`** routes (dashboard, tasks, wallet, verification, etc.) are wrapped with **[`RequireAuth`](frontend/components/auth/RequireAuth.tsx)** in **[`(app)/layout.tsx`](frontend/app/(app)/layout.tsx)** — users must **Privy sign-in** (`authenticated`) before **`AppShell`** renders; **`/`** landing (and **`/skill.md`** rewrite) stay public without a wallet. The gate uses **landing-aligned** chrome: **[`LandingLogoLink`](frontend/components/brand/LandingLogoLink.tsx)** + **[`ThemeToggle`](frontend/components/shell/ThemeToggle.tsx)**, **`html[data-theme]`** **`--ed-*`** tokens, serif headline and inverted ink **Connect wallet** / outline **Back to home** pills ( **[`.landing-gate-btn`](frontend/app/globals.css)** hover).
+
+- **Frontend (World ID):** **`/verification`** combines status (**[`VerificationContent`](frontend/app/(app)/verification/VerificationContent.tsx)**) and verify (**[`RegisterFlow`](frontend/app/(app)/register/RegisterFlow.tsx)**); **`/register`** redirects to **`/verification`**; sidebar Protocol has a single **World ID** entry. Device/Orb chips distinguish **completed** tiers (**Device · done**, **Orb · done**) from the **next** verify mode (**Orb (upgrade)** when applicable). Landing/dashboard CTAs and API **403** copy point to **`/verification`** where relevant.
+
 - **Frontend (`/tasks` Market):** **[`TasksMarket`](frontend/components/tasks/TasksMarket.tsx)** adds **Status** chips (**All**, **Published**, **Accepted**, **Review** → **`awaiting_requester_review`**, **Disputed**) combined with search + category; results title reflects active status + category filters.
 
 - **Frontend (`/dashboard`):** KPI cards, task volume chart (**`volume_range`** **24H / 7D / 30D / ALL**), category bars, recent settlements, and **Top executors** load from **`GET /api/v1/dashboard/overview`** via **`fetchDashboardOverview`** ([`frontend/lib/api.ts`](frontend/lib/api.ts)) and TanStack **`useQuery`** in **[`DashboardHome`](frontend/components/dashboard/DashboardHome.tsx)** (replaces static demo numbers).
@@ -35,6 +45,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Scripts:** [`scripts/sync-skill-body.mjs`](scripts/sync-skill-body.mjs) — prints paths for reconciling **`docs/agent-http-integration.md`** with **`frontend/content/skill-body.md`** (verify **`curl …/skill.md | grep -c '{{'`** → **`0`**).
 
 ### Fixed
+
+- **Frontend (Privy):** [`providers.tsx`](frontend/app/providers.tsx) passes a **`useMemo`**-stable **`privyProviderConfig`** into **`PrivyProvider`** instead of a new object every render, and wraps **`SyncOpBNBChain`** + app **`children`** in a single **`display: contents`** (`className="contents"`) node under **`WagmiProvider`** so **`@privy-io/wagmi`** receives one React child (avoids “unique key” dev warnings from sibling lists in some React 19 + Privy setups).
+
+- **Frontend (`/register`):** World ID **`POST /api/v1/world-id/verify`** errors (e.g. **409** nullifier already linked to another wallet) are **caught** in [`RegisterFlow`](frontend/app/(app)/register/RegisterFlow.tsx) with a clear inline message instead of an uncaught runtime error; duplicate **`handleVerify`** invocations from IDKit are ignored via an **in-flight** guard.
 
 - **Frontend (`/tasks` Market):** Task drawer ([`TasksMarket`](frontend/components/tasks/TasksMarket.tsx)) shows **full task id**, **deadline**, and **updated** when the API supplies them; primary CTA is **Accept — lock escrow** only when **`status`** is **`published`**; otherwise **View task details** (same link to **`/tasks/[id]`**). List view row action matches (**Accept** vs **View details**).
 

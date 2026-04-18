@@ -1,7 +1,6 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { useMemo } from "react";
 import { getAddress } from "viem";
@@ -54,7 +53,6 @@ function EligibilityRows({
 }
 
 function VerificationInner() {
-  const router = useRouter();
   const { authenticated, login } = usePrivy();
   const { address } = useAccount();
   const { wallets } = useWallets();
@@ -165,8 +163,8 @@ function VerificationInner() {
           <div className="rounded-[14px] border border-az-stroke-2 bg-white/[0.03] px-4 py-4">
             <p className="text-sm font-medium text-az-text">Not verified yet</p>
             <p className="mt-2 text-sm leading-relaxed text-az-muted-2">
-              Complete World ID on Register to accept tasks. Your wallet address is used as the
-              signal so the backend can tie verification to your identity.
+              Complete World ID below to accept tasks. Your wallet address is used as the signal so
+              the backend can tie verification to your identity.
             </p>
           </div>
         )}
@@ -174,8 +172,15 @@ function VerificationInner() {
           <div className="rounded-[14px] border border-sky-500/30 bg-sky-500/10 px-4 py-4">
             <p className="text-sm font-medium text-sky-100">Verified at Device level</p>
             <p className="mt-2 text-sm leading-relaxed text-sky-100/90">
-              You can accept tasks that do not require Orb.               For bounties at or above $
-              {orbBountyThresholdLabel} USDC, Orb verification is required—upgrade on Register.
+              You can accept tasks that do not require Orb. For bounties at or above $
+              {orbBountyThresholdLabel} USDC, Orb verification is required—upgrade in{" "}
+              <a
+                href="#world-id-verify"
+                className="font-medium text-sky-50 underline underline-offset-2 hover:text-white"
+              >
+                Verify or upgrade
+              </a>{" "}
+              below.
             </p>
           </div>
         )}
@@ -221,16 +226,15 @@ function VerificationInner() {
         </p>
       </details>
 
-      <div className="flex flex-wrap gap-3">
-        <BtnPrimary
-          type="button"
-          onClick={() => {
-            router.push("/register");
-          }}
+      <p className="text-sm text-az-muted-2">
+        <a
+          href="#world-id-verify"
+          className="font-medium text-[#cdf56a] underline underline-offset-2 hover:text-az-text"
         >
-          Go to Register to verify or upgrade
-        </BtnPrimary>
-      </div>
+          Verify or upgrade with World ID
+        </a>{" "}
+        on this page.
+      </p>
     </div>
   );
 }

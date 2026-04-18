@@ -3,7 +3,7 @@
 import { PrivyProvider } from "@privy-io/react-auth";
 import { WagmiProvider } from "@privy-io/wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { Children, createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { SyncOpBNBChain } from "@/components/wallet/SyncOpBNBChain";
 import { opBNBTestnet } from "@/lib/chains";
@@ -20,21 +20,53 @@ function PrivyStack({ children }: { children: ReactNode }) {
 
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? "";
 
+  /** Stable reference — new object literals each render can disturb Privy/wagmi internals (React 19 key warnings). */
+  const privyProviderConfig = useMemo(
+    () => ({
+      embeddedWallets: {
+        ethereum: { createOnLogin: "users-without-wallets" as const },
+      },
+      supportedChains: [opBNBTestnet],
+      defaultChain: opBNBTestnet,
+    }),
+    [],
+  );
+
+  // #region agent log
+  useEffect(() => {
+    const arr = Children.toArray(children);
+    fetch("http://127.0.0.1:7675/ingest/a6edaa57-fc9c-4bd9-9435-f1ce83aaa252", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "b12d08" },
+      body: JSON.stringify({
+        sessionId: "b12d08",
+        location: "providers.tsx:PrivyStack",
+        message: "Wagmi single-wrapper verification",
+        hypothesisId: "H_single_wagmi_child",
+        data: {
+          segmentChildCount: Children.count(children),
+          segmentToArrayLen: arr.length,
+          keyedWrapper: true,
+        },
+        timestamp: Date.now(),
+        runId: "wagmi-contents-wrapper",
+      }),
+    }).catch(() => {});
+  }, [children]);
+  // #endregion
+
   return (
     <PrivyProvider
       appId={appId}
-      config={{
-        embeddedWallets: {
-          ethereum: { createOnLogin: "users-without-wallets" },
-        },
-        supportedChains: [opBNBTestnet],
-        defaultChain: opBNBTestnet,
-      }}
+      config={privyProviderConfig}
     >
       <QueryClientProvider client={queryClient}>
         <WagmiProvider config={wagmiConfig}>
-          <SyncOpBNBChain />
-          {children}
+          {/* One React child for @privy-io/wagmi — avoids sibling lists without keys in some versions */}
+          <div className="contents">
+            <SyncOpBNBChain />
+            {children}
+          </div>
         </WagmiProvider>
       </QueryClientProvider>
     </PrivyProvider>

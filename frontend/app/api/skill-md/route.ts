@@ -27,7 +27,7 @@ function yamlHeaderAndMetadata(): string {
     open_api_docs: apiDocs,
     agent_onboarding:
       "wallet_signature via POST /api/v1/executors/agent-challenge then POST /api/v1/executors/agent-verify",
-    humans: "World ID via /register (frontend) + POST /api/v1/world-id/verify",
+    humans: "World ID via /verification (frontend; /register redirects) + POST /api/v1/world-id/verify",
   };
 
   const metaJson = JSON.stringify(metadata, null, 2);

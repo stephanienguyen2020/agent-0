@@ -44,7 +44,7 @@ function formatUpdated(iso: string | null | undefined) {
   }
 }
 
-type TabId = "all" | "published" | "in_progress" | "completed" | "disputed";
+type TabId = "all" | "published" | "in_progress" | "review" | "completed" | "disputed";
 
 function tabFilter(tab: TabId, status: string) {
   const s = status.toLowerCase();
@@ -53,6 +53,7 @@ function tabFilter(tab: TabId, status: string) {
   if (tab === "in_progress") {
     return ["in_progress", "accepted", "submitted", "awaiting_requester_review", "verifying"].includes(s);
   }
+  if (tab === "review") return s === "awaiting_requester_review";
   if (tab === "completed") return s === "completed";
   if (tab === "disputed") return s === "disputed";
   return true;
@@ -155,12 +156,20 @@ export function MyTasksTable({ tasks }: { tasks: TaskRow[] }) {
   const [tab, setTab] = useState<TabId>("all");
 
   const counts = useMemo(() => {
-    const c: Record<TabId, number> = { all: tasks.length, published: 0, in_progress: 0, completed: 0, disputed: 0 };
+    const c: Record<TabId, number> = {
+      all: tasks.length,
+      published: 0,
+      in_progress: 0,
+      review: 0,
+      completed: 0,
+      disputed: 0,
+    };
     for (const t of tasks) {
       const s = t.status.toLowerCase();
       if (s === "published") c.published += 1;
       if (s === "completed") c.completed += 1;
       if (s === "disputed") c.disputed += 1;
+      if (s === "awaiting_requester_review") c.review += 1;
       if (["in_progress", "accepted", "submitted", "awaiting_requester_review", "verifying"].includes(s)) {
         c.in_progress += 1;
       }
@@ -171,11 +180,12 @@ export function MyTasksTable({ tasks }: { tasks: TaskRow[] }) {
   const filtered = useMemo(() => tasks.filter((t) => tabFilter(tab, t.status)), [tasks, tab]);
 
   const tabs: { id: TabId; label: string }[] = [
-    { id: "all",         label: "All" },
-    { id: "published",   label: "Published" },
+    { id: "all", label: "All" },
+    { id: "published", label: "Published" },
     { id: "in_progress", label: "In progress" },
-    { id: "completed",   label: "Completed" },
-    { id: "disputed",    label: "Disputed" },
+    { id: "review", label: "Review" },
+    { id: "completed", label: "Completed" },
+    { id: "disputed", label: "Disputed" },
   ];
 
   return (

@@ -1,3 +1,14 @@
+/** Latest submission’s files from `evidence_items` (GET task single). */
+export type TaskEvidenceItem = {
+  item_index: number;
+  filename: string;
+  content_type: string;
+  greenfield_url: string;
+  exif_gps_lat?: number;
+  exif_gps_lng?: number;
+  exif_timestamp?: string;
+};
+
 /** Fields returned by GET /api/v1/tasks/:id (Supabase tasks row + joins not included). */
 export type TaskApiRecord = {
   task_id: string;
@@ -29,4 +40,6 @@ export type TaskApiRecord = {
   executor_wallet?: string | null;
   /** Mirrors server `REQUESTER_APPROVAL_BEFORE_VERIFY`. */
   requester_approval_before_verify?: boolean;
+  /** Latest evidence submission items for preview (task detail). */
+  evidence_items?: TaskEvidenceItem[];
 };

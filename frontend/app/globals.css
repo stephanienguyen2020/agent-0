@@ -712,4 +712,19 @@
       filter: blur(12px);
     }
   }
+
+  /* Auth gate — landing-style pill hover (RequireAuth.tsx) */
+  .landing-gate-btn:hover {
+    transform: translateY(-1px);
+  }
+  .landing-gate-btn:active {
+    transform: translateY(0) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-gate-btn:hover,
+  .landing-gate-btn:active {
+    transform: none;
+  }
 }
