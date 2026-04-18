@@ -29,6 +29,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Frontend (x402 publish / opBNB):** Shared **[`wagmi-config`](frontend/lib/wagmi-config.ts)** (`WagmiProvider` uses the same singleton). **`ensureOpBNBForX402Publish`** ([`ensure-opbnb-chain.ts`](frontend/lib/ensure-opbnb-chain.ts)) aligns the wallet using **`getChainId(config)`** before EIP-712 signing instead of **`readInjectedChainId()`** on **`window.ethereum`**, so users are not blocked when the header/Privy/wagmi are already on **5611** but another browser extension reports a different chain. Used by **[`PostTaskForm`](frontend/app/(app)/tasks/new/PostTaskForm.tsx)** and **[`publish-task-client`](frontend/lib/publish-task-client.ts)** / Create with AI publish.
+
 - **Create with AI (`/tasks/chat`):** **[`ChatTaskPanel`](frontend/components/tasks/ChatTaskPanel.tsx)** keeps the last validated draft when the user sends a short confirmation (**yes**, **ok**, **proceed**, etc.) but **`POST /api/v1/tasks/assistant-chat`** returns **`draft: null`**, so the **Draft ready** panel still appears after “review the details” turns.
 - **API (`POST /api/v1/tasks/assistant-chat`):** **[`task_assistant_llm.py`](backend/em_api/services/task_assistant_llm.py)** prompts require a complete **`draft`** JSON on confirmation and when asking for review (**`physical_presence`** includes coordinates); tool-follow wording no longer suggests **`draft`** must always be **`null`**; assistant draft validation failures log at **warning**.
 

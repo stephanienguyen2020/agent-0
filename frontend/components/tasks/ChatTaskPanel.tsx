@@ -7,7 +7,7 @@ import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import { getAddress } from "viem";
-import { useAccount, useChainId, useSignTypedData, useSwitchChain } from "wagmi";
+import { useAccount, useSignTypedData, useSwitchChain } from "wagmi";
 
 import { usePrivyConfigured } from "@/app/providers";
 import {
@@ -217,7 +217,6 @@ export function ChatTaskPanel() {
   const privyOk = usePrivyConfigured();
   const { authenticated, login } = usePrivy();
   const { address } = useAccount();
-  const wagmiChainId = useChainId();
   const { wallets } = useWallets();
   const { signTypedDataAsync } = useSignTypedData();
   const { switchChainAsync } = useSwitchChain();
@@ -317,7 +316,6 @@ export function ChatTaskPanel() {
         normalizedWallet,
         signTypedDataAsync,
         switchChainAsync,
-        wagmiChainId,
         skipPayment,
       });
       setPublishResult({ task_id: res.task_id, tx: res.on_chain_tx_publish });
@@ -326,7 +324,7 @@ export function ChatTaskPanel() {
     } finally {
       setPublishBusy(false);
     }
-  }, [draft, normalizedWallet, signTypedDataAsync, switchChainAsync, wagmiChainId, skipPayment]);
+  }, [draft, normalizedWallet, signTypedDataAsync, switchChainAsync, skipPayment]);
 
   const panelStyle = {
     border: "1px solid var(--line)",

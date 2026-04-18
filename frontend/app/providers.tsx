@@ -1,13 +1,13 @@
 "use client";
 
 import { PrivyProvider } from "@privy-io/react-auth";
-import { WagmiProvider, createConfig } from "@privy-io/wagmi";
-import { http } from "wagmi";
+import { WagmiProvider } from "@privy-io/wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createContext, useContext, useState, type ReactNode } from "react";
 
 import { SyncOpBNBChain } from "@/components/wallet/SyncOpBNBChain";
 import { opBNBTestnet } from "@/lib/chains";
+import { wagmiConfig } from "@/lib/wagmi-config";
 
 export const PrivyEnabledContext = createContext(false);
 
@@ -17,16 +17,6 @@ export function usePrivyConfigured() {
 
 function PrivyStack({ children }: { children: ReactNode }) {
   const [queryClient] = useState(() => new QueryClient());
-  const [wagmiConfig] = useState(() =>
-    createConfig({
-      chains: [opBNBTestnet],
-      transports: {
-        [opBNBTestnet.id]: http(
-          process.env.NEXT_PUBLIC_OPBNB_RPC_URL || "https://opbnb-testnet-rpc.bnbchain.org",
-        ),
-      },
-    }),
-  );
 
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? "";
 

@@ -4,13 +4,13 @@ import Link from "next/link";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { type Address, getAddress, type Hex } from "viem";
-import { useAccount, useChainId, useSignTypedData, useSwitchChain } from "wagmi";
+import { useAccount, useSignTypedData, useSwitchChain } from "wagmi";
 
 import { usePrivyConfigured } from "@/app/providers";
 import { createTask, getEscrowFeeBps, type TaskCreateBody } from "@/lib/api";
 import { ESCROW_FEE_BPS } from "@/lib/constants";
-import { opBNBTestnet } from "@/lib/chains";
-import { readInjectedChainId } from "@/lib/read-injected-chain-id";
+import { ensureOpBNBForX402Publish } from "@/lib/ensure-opbnb-chain";
+import { wagmiConfig } from "@/lib/wagmi-config";
 import {
   authorizationFromSignature,
   buildTransferWithAuthorizationSignArgs,
@@ -65,7 +65,6 @@ export function PostTaskForm() {
   const privyOk = usePrivyConfigured();
   const { authenticated, login } = usePrivy();
   const { address } = useAccount();
-  const wagmiChainId = useChainId();
   const { wallets } = useWallets();
   const { signTypedDataAsync } = useSignTypedData();
   const { switchChainAsync } = useSwitchChain();
@@ -155,29 +154,7 @@ export function PostTaskForm() {
           return;
         }
         if (mockUsdc && escrow) {
-          let injected = await readInjectedChainId();
-          const mustSwitch =
-            injected != null
-              ? injected !== opBNBTestnet.id
-              : wagmiChainId !== opBNBTestnet.id;
-          if (mustSwitch) {
-            await switchChainAsync({ chainId: opBNBTestnet.id });
-          }
-          if (injected != null) {
-            for (let i = 0; i < 45; i++) {
-              injected = await readInjectedChainId();
-              if (injected === opBNBTestnet.id) break;
-              await new Promise<void>((resolve) => {
-                requestAnimationFrame(() => resolve());
-              });
-            }
-            if (injected !== opBNBTestnet.id) {
-              setErr(
-                "Your wallet must be on opBNB Testnet (chain 5611) to sign. Approve the network switch in MetaMask if prompted, then click Publish again.",
-              );
-              return;
-            }
-          }
+          await ensureOpBNBForX402Publish({ config: wagmiConfig, switchChainAsync });
           const validAfter = 0;
           const validBefore = Math.floor(Date.now() / 1000) + 600;
           const nonce = randomNonceHex32();
@@ -229,7 +206,6 @@ export function PostTaskForm() {
       escrow,
       signTypedDataAsync,
       switchChainAsync,
-      wagmiChainId,
     ],
   );
 
