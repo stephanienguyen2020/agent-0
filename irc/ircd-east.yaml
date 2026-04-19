@@ -1,0 +1,7 @@
+# Minimal placeholder — see docs/04-irc-x402-flow-protocol.md for full ergo config
+network:
+  name: em-irc-east
+
+server:
+  listen:
+    - ":6667"

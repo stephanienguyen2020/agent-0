@@ -1,0 +1,15 @@
+# Local x402 EIP-3009 facilitator — POST /verify, POST /settle, GET /healthz on port 8402.
+# Requires repo-root `.env` with MOCK_USDC_ADDRESS, EM_ESCROW_ADDRESS, FACILITATOR_PRIVATE_KEY (tBNB-funded),
+# and OPBNB_RPC_URL (same values the FastAPI backend uses).
+#
+# Usage: docker compose up facilitator
+# Then ensure X402_FACILITATOR_URL=http://localhost:8402 (default in .env.example).
+
+services:
+  facilitator:
+    build:
+      context: ./facilitator
+    ports:
+      - "8402:8402"
+    env_file:
+      - .env

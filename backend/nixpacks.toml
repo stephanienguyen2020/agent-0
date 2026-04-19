@@ -1,0 +1,9 @@
+# Railway / Nixpacks — FastAPI backend (set service Root Directory to `backend/`)
+# Health: GET /health
+#
+# Do not override [phases.install] with bare `pip` commands: that replaces the
+# Python provider's default (venv + pip) and fails with `pip: command not found`.
+# Start is also set via [backend/Procfile] (web: uvicorn …).
+
+[start]
+cmd = "sh -c 'uvicorn em_api.main:app --host 0.0.0.0 --port ${PORT:-8000}'"

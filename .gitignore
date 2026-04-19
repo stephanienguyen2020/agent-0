@@ -1,0 +1,50 @@
+# Env & secrets
+.env
+.env.local
+.contracts.env
+*.pem
+
+# Dependencies
+node_modules/
+.venv/
+__pycache__/
+*.py[cod]
+.Python
+
+# Build / IDE
+dist/
+build/
+.next/
+out/
+cache/
+broadcast/
+# Do not ignore contracts/lib (Foundry deps / submodules)
+*.egg-info/
+.idea/
+.vscode/
+.DS_Store
+
+# Foundry
+contracts/cache/
+contracts/out/
+contracts/broadcast/
+# Generated Standard JSON for manual explorer verification
+contracts/verification-standard-json/
+contracts/lib/
+# Logs
+*.log
+npm-debug.log*
+
+# Supabase
+supabase/.branches
+supabase/.temp
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+
+
+files/
+docs/

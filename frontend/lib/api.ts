@@ -1,0 +1,349 @@
+import { getApiBase } from "@/lib/api-base";
+import { ESCROW_FEE_BPS } from "@/lib/constants";
+import type { TaskApiRecord } from "@/lib/task-types";
+
+/** Basis points charged by deployed EMEscrow — use for EIP-3009 totals (fallback: `ESCROW_FEE_BPS`). */
+export async function getEscrowFeeBps(): Promise<number> {
+  const r = await fetch(`${getApiBase()}/api/v1/tasks/escrow-fee-bps`, { cache: "no-store" });
+  if (!r.ok) return ESCROW_FEE_BPS;
+  const j = (await r.json()) as { fee_bps?: unknown };
+  return typeof j.fee_bps === "number" && j.fee_bps >= 0 && j.fee_bps <= 10_000 ? j.fee_bps : ESCROW_FEE_BPS;
+}
+
+/** Parse FastAPI `{ "detail": "..." }` (or validation array) for display. */
+export function parseFastApiDetail(body: string): string {
+  const t = body.trim();
+  if (!t) return "Request failed";
+  try {
+    const j = JSON.parse(t) as { detail?: unknown };
+    if (typeof j.detail === "string") return j.detail;
+    if (Array.isArray(j.detail)) {
+      return j.detail
+        .map((x) =>
+          typeof x === "object" && x !== null && "msg" in x
+            ? String((x as { msg: unknown }).msg)
+            : String(x),
+        )
+        .join("; ");
+    }
+  } catch {
+    /* plain text */
+  }
+  return t;
+}
+
+export type TaskCreateBody = {
+  requester_wallet: string;
+  requester_erc8004_id: number;
+  title: string;
+  instructions: string;
+  category: string;
+  bounty_micros: number;
+  deadline_at: string;
+  evidence_schema?: Record<string, unknown>;
+  executor_requirements?: Record<string, unknown>;
+  location_lat?: number;
+  location_lng?: number;
+  location_radius_m?: number;
+};
+
+export type CreateTaskResponse = {
+  task_id: string;
+  on_chain_tx_publish?: string;
+  on_chain_tx_x402_settle?: string;
+};
+
+export async function createTask(
+  body: TaskCreateBody,
+  opts?: { xPayment?: string; xPaymentSkip?: boolean },
+): Promise<CreateTaskResponse> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (opts?.xPayment) headers["X-PAYMENT"] = opts.xPayment;
+  if (opts?.xPaymentSkip) headers["X-PAYMENT-SKIP"] = "1";
+
+  const r = await fetch(`${getApiBase()}/api/v1/tasks`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+  const text = await r.text();
+  if (!r.ok) {
+    throw new Error(parseFastApiDetail(text) || `${r.status} ${r.statusText}`);
+  }
+  return JSON.parse(text) as CreateTaskResponse;
+}
+
+export async function fetchTasks(opts?: { status?: string }) {
+  const base = getApiBase();
+  const params = new URLSearchParams();
+  if (opts?.status) params.set("status", opts.status);
+  const qs = params.toString();
+  const r = await fetch(`${base}/api/v1/tasks${qs ? `?${qs}` : ""}`, {
+    next: { revalidate: 15 },
+  });
+  if (!r.ok) throw new Error("failed to load tasks");
+  return r.json() as Promise<{ tasks: unknown[] }>;
+}
+
+export async function fetchTask(id: string): Promise<TaskApiRecord> {
+  const r = await fetch(`${getApiBase()}/api/v1/tasks/${id}`, { cache: "no-store" });
+  if (!r.ok) throw new Error("task not found");
+  return r.json() as Promise<TaskApiRecord>;
+}
+
+export type LeaderboardExecutor = {
+  rank: number;
+  executor_id: string;
+  display_name: string;
+  type: string;
+  wallet: string | null;
+  score: number;
+  rating_bps: number;
+  tasks_completed: number;
+  tasks_disputed: number;
+  dispute_losses: number;
+  total_earned_micros: string;
+};
+
+export async function fetchLeaderboard(opts?: {
+  type?: "all" | "human" | "agent" | "robot";
+  limit?: number;
+}): Promise<{ executors: LeaderboardExecutor[] }> {
+  const params = new URLSearchParams();
+  const t = opts?.type;
+  if (t && t !== "all") params.set("type", t);
+  if (opts?.limit != null) params.set("limit", String(opts.limit));
+  const qs = params.toString();
+  const url = `${getApiBase()}/api/v1/leaderboard${qs ? `?${qs}` : ""}`;
+  const r = await fetch(url, { cache: "no-store" });
+  const text = await r.text();
+  if (!r.ok) {
+    throw new Error(parseFastApiDetail(text) || `${r.status} ${r.statusText}`);
+  }
+  return JSON.parse(text) as { executors: LeaderboardExecutor[] };
+}
+
+/** Row from `GET /api/v1/executors` (directory; includes zero-task profiles). */
+export type ExecutorDirectoryEntry = {
+  executor_id: string;
+  display_name: string;
+  type: string;
+  wallet: string | null;
+  score: number;
+  rating_bps: number;
+  tasks_completed: number;
+  tasks_disputed: number;
+  dispute_losses: number;
+  total_earned_micros: string;
+  capabilities: string[] | null;
+  regions: string[] | null;
+  specialties: unknown[] | null;
+};
+
+export async function fetchExecutorsDirectory(opts?: {
+  type?: "all" | "human" | "agent" | "robot";
+  limit?: number;
+}): Promise<{ executors: ExecutorDirectoryEntry[] }> {
+  const params = new URLSearchParams();
+  const t = opts?.type;
+  if (t && t !== "all") params.set("type", t);
+  params.set("limit", String(opts?.limit ?? 100));
+  const qs = params.toString();
+  const url = `${getApiBase()}/api/v1/executors?${qs}`;
+  const r = await fetch(url, { cache: "no-store" });
+  const text = await r.text();
+  if (!r.ok) {
+    throw new Error(parseFastApiDetail(text) || `${r.status} ${r.statusText}`);
+  }
+  return JSON.parse(text) as { executors: ExecutorDirectoryEntry[] };
+}
+
+export type WalletActivityItem = {
+  id: string;
+  task_id: string;
+  title: string;
+  status?: string;
+  role: string;
+  kind: string;
+  bucket: "spent" | "earned" | "escrow";
+  tx_hash: string;
+  occurred_at: string | null;
+};
+
+export async function fetchWalletActivity(
+  wallet: string,
+  opts?: { limit?: number },
+): Promise<{ wallet: string; items: WalletActivityItem[] }> {
+  const params = new URLSearchParams();
+  params.set("wallet", wallet);
+  if (opts?.limit != null) params.set("limit", String(opts.limit));
+  const r = await fetch(`${getApiBase()}/api/v1/wallet/activity?${params}`, { cache: "no-store" });
+  const text = await r.text();
+  if (!r.ok) {
+    throw new Error(parseFastApiDetail(text) || `${r.status} ${r.statusText}`);
+  }
+  return JSON.parse(text) as { wallet: string; items: WalletActivityItem[] };
+}
+
+export type ChatMessage = { role: "user" | "assistant"; content: string };
+
+/** Validated task draft from LLM (matches server `validate_task_draft_dict` output shape). */
+export type TaskDraftFromApi = {
+  title: string;
+  instructions: string;
+  category: string;
+  bounty_micros: number;
+  deadline_at: string;
+  evidence_schema?: Record<string, unknown>;
+  executor_requirements?: Record<string, unknown>;
+  location_lat?: number;
+  location_lng?: number;
+  location_radius_m?: number;
+};
+
+export type DraftChatResponse = {
+  assistant_message: string;
+  needs_clarification: boolean;
+  draft: TaskDraftFromApi | null;
+};
+
+export type PendingAction = {
+  type: string;
+  task_id?: string;
+  reason?: string;
+};
+
+export type AssistantChatResponse = {
+  assistant_message: string;
+  needs_clarification?: boolean;
+  draft: TaskDraftFromApi | null;
+  pending_actions?: PendingAction[];
+  /** Set when the model returned a draft object that still failed server validation (e.g. invalid_bounty). */
+  draft_validation_error?: string;
+};
+
+export async function postDraftChat(messages: ChatMessage[]): Promise<DraftChatResponse> {
+  const r = await fetch(`${getApiBase()}/api/v1/tasks/draft-chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages }),
+  });
+  const text = await r.text();
+  if (!r.ok) {
+    throw new Error(parseFastApiDetail(text) || `${r.status} ${r.statusText}`);
+  }
+  return JSON.parse(text) as DraftChatResponse;
+}
+
+export async function postAssistantChat(
+  messages: ChatMessage[],
+  requester_wallet: string,
+): Promise<AssistantChatResponse> {
+  const r = await fetch(`${getApiBase()}/api/v1/tasks/assistant-chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages, requester_wallet }),
+  });
+  const text = await r.text();
+  if (!r.ok) {
+    throw new Error(parseFastApiDetail(text) || `${r.status} ${r.statusText}`);
+  }
+  return JSON.parse(text) as AssistantChatResponse;
+}
+
+export async function fetchWalletEscrowLocked(wallet: string): Promise<{
+  wallet: string;
+  locked_micros: string;
+  task_count: number;
+}> {
+  const params = new URLSearchParams();
+  params.set("wallet", wallet);
+  const r = await fetch(`${getApiBase()}/api/v1/wallet/escrow-locked?${params}`, { cache: "no-store" });
+  const text = await r.text();
+  if (!r.ok) {
+    throw new Error(parseFastApiDetail(text) || `${r.status} ${r.statusText}`);
+  }
+  return JSON.parse(text) as { wallet: string; locked_micros: string; task_count: number };
+}
+
+export type WorldIdVerificationLevel = "device" | "orb";
+
+export type WorldIdStatusResponse = {
+  verification_level: WorldIdVerificationLevel | null;
+  orb_bounty_threshold_micros?: number;
+  world_id_accept_enforce?: boolean;
+};
+
+export async function fetchWorldIdStatus(wallet: string): Promise<WorldIdStatusResponse> {
+  const params = new URLSearchParams();
+  params.set("wallet", wallet);
+  const r = await fetch(`${getApiBase()}/api/v1/world-id/status?${params}`, {
+    cache: "no-store",
+  });
+  const text = await r.text();
+  if (!r.ok) {
+    throw new Error(parseFastApiDetail(text) || `${r.status} ${r.statusText}`);
+  }
+  return JSON.parse(text) as WorldIdStatusResponse;
+}
+
+export async function postWorldIdVerify(body: {
+  wallet: string;
+  /** IDKit proof payload — typed loosely so `IDKitResult` variants serialize as JSON objects. */
+  idkit_result: unknown;
+}): Promise<Record<string, unknown>> {
+  const r = await fetch(`${getApiBase()}/api/v1/world-id/verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const text = await r.text();
+  if (!r.ok) {
+    throw new Error(parseFastApiDetail(text) || `${r.status} ${r.statusText}`);
+  }
+  return JSON.parse(text) as Record<string, unknown>;
+}
+
+export type DashboardVolumeRange = "24h" | "7d" | "30d" | "all";
+
+export type DashboardOverview = {
+  kpis: {
+    tasks_completed: number;
+    tasks_completed_delta_pct: number | null;
+    active_executors: number;
+    active_executors_delta_pct: number | null;
+    avg_completion_minutes: number | null;
+    avg_completion_delta_pct: number | null;
+    usdc_volume_24h_micros: string;
+    usdc_volume_24h_delta_pct: number | null;
+  };
+  task_volume: { date: string; label: string; count: number }[];
+  volume_range: DashboardVolumeRange;
+  category_distribution: { category: string; label: string; count: number; pct: number }[];
+  recent_settlements: {
+    task_id: string;
+    title: string;
+    settled_at: string | null;
+    bounty_micros: string;
+    category: string | null;
+  }[];
+  executors_highlight: {
+    display_name: string;
+    type: string | null;
+    type_display: string;
+    wallet: string;
+  }[];
+};
+
+export async function fetchDashboardOverview(opts?: {
+  volumeRange?: DashboardVolumeRange;
+}): Promise<DashboardOverview> {
+  const params = new URLSearchParams();
+  params.set("volume_range", opts?.volumeRange ?? "7d");
+  const r = await fetch(`${getApiBase()}/api/v1/dashboard/overview?${params}`, { cache: "no-store" });
+  const text = await r.text();
+  if (!r.ok) {
+    throw new Error(parseFastApiDetail(text) || `${r.status} ${r.statusText}`);
+  }
+  return JSON.parse(text) as DashboardOverview;
+}

@@ -1,0 +1,5 @@
+{
+  "name": "Agent Zero Platform",
+  "description": " orchestrator",
+  "capabilities": ["tasks.publish", "tasks.settle", "irc.relay"]
+}

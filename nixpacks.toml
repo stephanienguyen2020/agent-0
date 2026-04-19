@@ -1,0 +1,18 @@
+# Railway / Nixpacks — emagents workers (set service Root Directory to repo root `.`)
+# Set env WORKER_MODULE per service:
+#   emagents.verifier_worker | emagents.settlement | emagents.reputation
+# Start runs scripts/railway-worker-start.sh
+#
+# Repo root has no pyproject.toml, so Nixpacks does not auto-install Python — `python3` is missing
+# on PATH until [phases.setup] adds it. Then create /opt/venv and editable-install backend + agents.
+
+[phases.setup]
+nixPkgs = ["...", "python311Full", "gcc"]
+
+[phases.install]
+cmds = [
+  "python3 -m venv --copies /opt/venv && . /opt/venv/bin/activate && pip install --upgrade pip setuptools wheel && pip install -e ./backend -e './agents[realtime]' && printf '\\nPATH=/opt/venv/bin:$PATH' >> /root/.profile && printf '\\nPATH=/opt/venv/bin:$PATH' >> /etc/environment",
+]
+
+[start]
+cmd = "sh scripts/railway-worker-start.sh"
