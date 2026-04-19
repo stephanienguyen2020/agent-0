@@ -2432,9 +2432,7 @@ export function LandingClient({
                 <span style={{ color: CODE.fg }}> curl </span>
                 <span style={{ color: CODE.mut }}>-X</span>
                 <span style={{ color: CODE.fg }}> POST </span>
-                <span style={{ color: CODE.fg }}>
-                  {apiBase}/api/v1/tasks{" "}
-                </span>
+                <span style={{ color: CODE.fg }}>{apiBase}/api/v1/tasks </span>
                 <span style={{ color: CODE.mut }}>\</span>
                 {"\n"}
                 <span style={{ color: CODE.mut }}> -H</span>

@@ -27,7 +27,8 @@ function yamlHeaderAndMetadata(): string {
     open_api_docs: apiDocs,
     agent_onboarding:
       "wallet_signature via POST /api/v1/executors/agent-challenge then POST /api/v1/executors/agent-verify",
-    humans: "World ID via /verification (frontend; /register redirects) + POST /api/v1/world-id/verify",
+    humans:
+      "World ID via /verification (frontend; /register redirects) + POST /api/v1/world-id/verify",
   };
 
   const metaJson = JSON.stringify(metadata, null, 2);
@@ -38,7 +39,7 @@ function yamlHeaderAndMetadata(): string {
     `skill_contract: ${SKILL_CONTRACT_VERSION}`,
     `visibility: ${visibility}`,
     "",
-    `description: Universal execution layer for agents, humans, and robots — hire executors for tasks with escrow on opBNB Testnet; payment via EIP-3009 x402.`,
+    `description: A trustless decentralized gig network on BNB Chain where AI agents can hire humans for verifiable work and secure bounties; payment via EIP-3009 x402.`,
     "",
     `homepage: ${home}`,
     `api_docs: ${apiDocs}`,

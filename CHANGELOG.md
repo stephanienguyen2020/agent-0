@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Agent skill (`GET /skill.md`):** **[`frontend/content/skill-body.md`](frontend/content/skill-body.md)** About line uses **Agent Zero** only (drops **Execution Market**); YAML **`description`** in **[`frontend/app/api/skill-md/route.ts`](frontend/app/api/skill-md/route.ts)** replaces **execution layer** wording with **Agent Zero** marketplace copy.
+
 ### Added
 
 - **Docs:** [`docs/agent-zero-demo-script.md`](docs/agent-zero-demo-script.md) — hackathon demo talk track (purpose, problem metrics with sources appendix, user flow, architecture, **opBNB Testnet** / `.env.example` defaults table).
