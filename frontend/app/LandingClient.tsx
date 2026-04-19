@@ -5,6 +5,7 @@ import { useState, useEffect, useMemo } from "react";
 
 import { LandingLogoLink } from "@/components/brand/LandingLogoLink";
 import { LandingConnectWallet } from "@/components/landing/LandingConnectWallet";
+import { getApiBase } from "@/lib/api-base";
 import { formatCategoryLabel } from "@/lib/task-styles";
 import type { ApiTask } from "./page";
 
@@ -205,9 +206,7 @@ function isoWeekNumberLocal(year: number, month: number, day: number): number {
   return (
     1 +
     Math.round(
-      ((t.getTime() - w1.getTime()) / 86400000 -
-        3 +
-        ((w1.getDay() + 6) % 7)) /
+      ((t.getTime() - w1.getTime()) / 86400000 - 3 + ((w1.getDay() + 6) % 7)) /
         7,
     )
   );
@@ -274,7 +273,7 @@ function ThemeToggle() {
     setDark(next);
     document.documentElement.setAttribute(
       "data-theme",
-      next ? "dark" : "light"
+      next ? "dark" : "light",
     );
   };
   return (
@@ -834,12 +833,14 @@ export function LandingClient({
   const [filterCats, setFilterCats] = useState<string[]>([]);
   const [filterChains, setFilterChains] = useState<string[]>([]);
   const [filterBounty, setFilterBounty] = useState<"any" | "sm" | "md" | "lg">(
-    "any"
+    "any",
   );
   const [calSel, setCalSel] = useState(() =>
     calendarTodayDay != null ? calendarTodayDay : 1,
   );
-  const [sortBy, setSortBy] = useState<"deadline" | "bounty" | "near" | "new">("deadline");
+  const [sortBy, setSortBy] = useState<"deadline" | "bounty" | "near" | "new">(
+    "deadline",
+  );
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
 
   const taskDaysInMonth = useMemo(
@@ -858,6 +859,8 @@ export function LandingClient({
     () => isoWeekNumberLocal(calendarYear, calendarMonth, calSel),
     [calendarYear, calendarMonth, calSel],
   );
+
+  const apiBase = useMemo(() => getApiBase(), []);
 
   const filtered = tasks.filter((t) => {
     if (filterCats.length && !filterCats.includes(t.category?.toLowerCase()))
@@ -883,8 +886,13 @@ export function LandingClient({
     return true;
   });
   const sorted = [...filtered].sort((a, b) => {
-    if (sortBy === "bounty") return Number(b.bounty_micros ?? 0) - Number(a.bounty_micros ?? 0);
-    if (sortBy === "deadline") return new Date(a.created_at ?? 0).getTime() - new Date(b.created_at ?? 0).getTime();
+    if (sortBy === "bounty")
+      return Number(b.bounty_micros ?? 0) - Number(a.bounty_micros ?? 0);
+    if (sortBy === "deadline")
+      return (
+        new Date(a.created_at ?? 0).getTime() -
+        new Date(b.created_at ?? 0).getTime()
+      );
     // "near" and "new" fall through to newest-first
     return (
       new Date(b.created_at ?? 0).getTime() -
@@ -894,11 +902,11 @@ export function LandingClient({
 
   const toggleCat = (id: string) =>
     setFilterCats((p) =>
-      p.includes(id) ? p.filter((x) => x !== id) : [...p, id]
+      p.includes(id) ? p.filter((x) => x !== id) : [...p, id],
     );
   const toggleChain = (id: string) =>
     setFilterChains((p) =>
-      p.includes(id) ? p.filter((x) => x !== id) : [...p, id]
+      p.includes(id) ? p.filter((x) => x !== id) : [...p, id],
     );
 
   return (
@@ -999,7 +1007,8 @@ export function LandingClient({
             role="alert"
             style={{
               borderBottom: "1px solid var(--line)",
-              background: "color-mix(in oklab, var(--accent-2) 8%, var(--card))",
+              background:
+                "color-mix(in oklab, var(--accent-2) 8%, var(--card))",
               padding: "12px 32px",
               fontSize: 13,
               lineHeight: 1.5,
@@ -1120,7 +1129,11 @@ export function LandingClient({
               <StatRow
                 label="Open bounty pool"
                 value={
-                  tasksLoadFailed ? "—" : openCount > 0 ? poolFormatted : "$0.00"
+                  tasksLoadFailed
+                    ? "—"
+                    : openCount > 0
+                      ? poolFormatted
+                      : "$0.00"
                 }
                 sub={
                   tasksLoadFailed
@@ -1133,12 +1146,14 @@ export function LandingClient({
               <StatRow
                 label="Open tasks"
                 value={
-                  tasksLoadFailed ? "—" : openCount > 0 ? String(openCount) : "0"
+                  tasksLoadFailed
+                    ? "—"
+                    : openCount > 0
+                      ? String(openCount)
+                      : "0"
                 }
                 sub={
-                  tasksLoadFailed
-                    ? "check API configuration"
-                    : "live right now"
+                  tasksLoadFailed ? "check API configuration" : "live right now"
                 }
               />
               <StatRow
@@ -1460,7 +1475,10 @@ export function LandingClient({
                         className="mono"
                         style={{ fontSize: 11, opacity: 0.5 }}
                       >
-                        {tasks.filter((t) => t.category?.toLowerCase() === id).length}
+                        {
+                          tasks.filter((t) => t.category?.toLowerCase() === id)
+                            .length
+                        }
                       </span>
                     </button>
                   );
@@ -1522,8 +1540,13 @@ export function LandingClient({
                           flexShrink: 0,
                         }}
                       />
-                      <span style={{ flex: 1, textAlign: "left" }}>{c.name}</span>
-                      <span className="mono" style={{ fontSize: 11, opacity: 0.5 }}>
+                      <span style={{ flex: 1, textAlign: "left" }}>
+                        {c.name}
+                      </span>
+                      <span
+                        className="mono"
+                        style={{ fontSize: 11, opacity: 0.5 }}
+                      >
                         {chainCount}
                       </span>
                     </button>
@@ -1690,33 +1713,69 @@ export function LandingClient({
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <span className="mono" style={{ fontSize: 11, color: "var(--mute)", marginRight: 4 }}>sort</span>
-                  {([ ["deadline","Deadline"], ["bounty","Bounty"], ["near","Near me"], ["new","Newest"] ] as const).map(([id, lab]) => (
+                  <span
+                    className="mono"
+                    style={{
+                      fontSize: 11,
+                      color: "var(--mute)",
+                      marginRight: 4,
+                    }}
+                  >
+                    sort
+                  </span>
+                  {(
+                    [
+                      ["deadline", "Deadline"],
+                      ["bounty", "Bounty"],
+                      ["near", "Near me"],
+                      ["new", "Newest"],
+                    ] as const
+                  ).map(([id, lab]) => (
                     <button
                       key={id}
                       onClick={() => setSortBy(id)}
                       style={{
                         border: "1px solid var(--line)",
-                        background: sortBy === id ? "var(--ink)" : "var(--card)",
+                        background:
+                          sortBy === id ? "var(--ink)" : "var(--card)",
                         color: sortBy === id ? "var(--bg)" : "var(--ink-2)",
-                        borderRadius: 999, padding: "5px 11px", fontSize: 12,
-                        cursor: "pointer", fontFamily: "inherit",
+                        borderRadius: 999,
+                        padding: "5px 11px",
+                        fontSize: 12,
+                        cursor: "pointer",
+                        fontFamily: "inherit",
                       }}
                     >
                       {lab}
                     </button>
                   ))}
-                  <div style={{ width: 1, height: 20, background: "var(--line)", margin: "0 6px" }} />
-                  {([ ["list", "☰"], ["map", "◎"] ] as const).map(([id, icon]) => (
+                  <div
+                    style={{
+                      width: 1,
+                      height: 20,
+                      background: "var(--line)",
+                      margin: "0 6px",
+                    }}
+                  />
+                  {(
+                    [
+                      ["list", "☰"],
+                      ["map", "◎"],
+                    ] as const
+                  ).map(([id, icon]) => (
                     <button
                       key={id}
                       onClick={() => setViewMode(id)}
                       style={{
                         border: "1px solid var(--line)",
-                        borderRadius: 6, padding: "4px 10px", fontSize: 14,
-                        background: viewMode === id ? "var(--ink)" : "transparent",
+                        borderRadius: 6,
+                        padding: "4px 10px",
+                        fontSize: 14,
+                        background:
+                          viewMode === id ? "var(--ink)" : "transparent",
                         color: viewMode === id ? "var(--bg)" : "var(--ink)",
-                        cursor: "pointer", fontFamily: "inherit",
+                        cursor: "pointer",
+                        fontFamily: "inherit",
                       }}
                     >
                       {icon}
@@ -1756,9 +1815,9 @@ export function LandingClient({
                           Math.round(
                             sorted.reduce(
                               (s, t) => s + Number(t.bounty_micros ?? 0),
-                              0
-                            ) / sorted.length
-                          )
+                              0,
+                            ) / sorted.length,
+                          ),
                         )
                       : "—"}
                   </div>
@@ -2246,188 +2305,6 @@ export function LandingClient({
           </div>
         </section>
 
-        {/* ── top posting agents ────────────────────────────────── */}
-        <section>
-          <div
-            style={{ maxWidth: 1360, margin: "0 auto", padding: "56px 32px" }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "baseline",
-                justifyContent: "space-between",
-                marginBottom: 18,
-                flexWrap: "wrap",
-                gap: 12,
-              }}
-            >
-              <div>
-                <div
-                  className="mono"
-                  style={{
-                    fontSize: 10.5,
-                    letterSpacing: ".14em",
-                    textTransform: "uppercase",
-                    color: "var(--mute)",
-                  }}
-                >
-                  Top posting agents
-                </div>
-                <div className="serif" style={{ fontSize: 34, marginTop: 4 }}>
-                  Meet the machines that pay you.
-                </div>
-              </div>
-              <Link
-                href="/agents"
-                className="btn"
-                style={{
-                  border: "1px solid var(--line)",
-                  background: "transparent",
-                  borderRadius: 999,
-                  padding: "8px 16px",
-                  fontSize: 13,
-                }}
-              >
-                Browse all agents →
-              </Link>
-            </div>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(4, 1fr)",
-                gap: 14,
-              }}
-              className="agents-grid"
-            >
-              {[
-                {
-                  h: "agent.travel",
-                  e: "0x7a…f02",
-                  v: "Verified",
-                  spent: "$18,402",
-                  tasks: "221",
-                  verdict: "95.4%",
-                },
-                {
-                  h: "agent.logi-7",
-                  e: "0x3b…a90",
-                  v: "Verified",
-                  spent: "$9,127",
-                  tasks: "84",
-                  verdict: "98.1%",
-                },
-                {
-                  h: "agent.notary.eth",
-                  e: "0x2e…181",
-                  v: "Credential",
-                  spent: "$42,860",
-                  tasks: "312",
-                  verdict: "99.7%",
-                },
-                {
-                  h: "agent.robot.fleet",
-                  e: "0x9c…d42",
-                  v: "Fleet",
-                  spent: "$71,020",
-                  tasks: "508",
-                  verdict: "96.8%",
-                },
-              ].map((a) => (
-                <div
-                  key={a.h}
-                  style={{
-                    border: "1px solid var(--line)",
-                    borderRadius: 12,
-                    padding: 18,
-                    background: "var(--card)",
-                  }}
-                >
-                  <div
-                    style={{ display: "flex", alignItems: "center", gap: 10 }}
-                  >
-                    <div
-                      style={{
-                        width: 38,
-                        height: 38,
-                        borderRadius: 8,
-                        background: "var(--ink)",
-                        color: "var(--bg)",
-                        display: "grid",
-                        placeItems: "center",
-                        fontFamily: "JetBrains Mono",
-                        fontWeight: 600,
-                        fontSize: 15,
-                        flexShrink: 0,
-                      }}
-                    >
-                      {a.h.slice(6, 8).toUpperCase()}
-                    </div>
-                    <div style={{ minWidth: 0 }}>
-                      <div
-                        className="mono"
-                        style={{
-                          fontWeight: 500,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {a.h}
-                      </div>
-                      <div
-                        className="mono"
-                        style={{ fontSize: 11, color: "var(--mute)" }}
-                      >
-                        {a.e} · {a.v}
-                      </div>
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr 1fr",
-                      gap: 8,
-                      marginTop: 16,
-                      paddingTop: 14,
-                      borderTop: "1px dashed var(--line)",
-                    }}
-                  >
-                    {[
-                      ["paid", a.spent],
-                      ["tasks", a.tasks],
-                      ["release", a.verdict],
-                    ].map(([label, val]) => (
-                      <div key={label}>
-                        <div
-                          className="mono"
-                          style={{
-                            fontSize: 10,
-                            color: "var(--mute)",
-                            textTransform: "uppercase",
-                            letterSpacing: ".1em",
-                          }}
-                        >
-                          {label}
-                        </div>
-                        <div
-                          className="mono"
-                          style={{
-                            fontSize: 15,
-                            fontWeight: 500,
-                            marginTop: 2,
-                          }}
-                        >
-                          {val}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
         {/* ── integration band (fixed dark surface; tokens do not follow --ink) ── */}
         <section
           style={{
@@ -2491,8 +2368,8 @@ export function LandingClient({
                   maxWidth: 460,
                 }}
               >
-                Connect via MCP or REST API. Empower your AI to publish,
-                assign, and verify physical tasks anywhere in the world.
+                Connect via MCP or REST API. Empower your AI to publish, assign,
+                and verify physical tasks anywhere in the world.
               </p>
               <div
                 style={{
@@ -2519,7 +2396,9 @@ export function LandingClient({
                 </Link>
                 <a
                   className="btn"
-                  href="#"
+                  href={`${apiBase}/docs`}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   style={{
                     padding: "10px 20px",
                     background: "transparent",
@@ -2554,11 +2433,11 @@ export function LandingClient({
                 <span style={{ color: CODE.mut }}>-X</span>
                 <span style={{ color: CODE.fg }}> POST </span>
                 <span style={{ color: CODE.fg }}>
-                  https://mcp.execution.market/mcp/tools/publish_task{" "}
+                  {apiBase}/api/v1/tasks{" "}
                 </span>
                 <span style={{ color: CODE.mut }}>\</span>
                 {"\n"}
-                <span style={{ color: CODE.mut }}>  -H</span>
+                <span style={{ color: CODE.mut }}> -H</span>
                 <span style={{ color: CODE.fg }}> </span>
                 <span style={{ color: CODE.str }}>
                   &quot;Authorization: Bearer $AGENT_KEY&quot;
@@ -2574,7 +2453,9 @@ export function LandingClient({
                 <span style={{ color: CODE.key }}>&quot;task_id&quot;</span>
                 <span style={{ color: CODE.mut }}>:</span>
                 <span style={{ color: CODE.fg }}> </span>
-                <span style={{ color: CODE.str }}>&quot;tsk_9f2c8...&quot;</span>
+                <span style={{ color: CODE.str }}>
+                  &quot;tsk_9f2c8...&quot;
+                </span>
                 <span style={{ color: CODE.mut }}>,</span>
                 {"\n"}
                 <span style={{ color: CODE.fg }}>{"  "}</span>
@@ -2629,20 +2510,6 @@ export function LandingClient({
           <div
             style={{ maxWidth: 1360, margin: "0 auto", padding: "48px 32px" }}
           >
-            <div
-              className="serif"
-              style={{
-                fontSize: "clamp(48px,8vw,120px)",
-                lineHeight: 0.92,
-                letterSpacing: "-0.03em",
-              }}
-            >
-              Humans today.
-              <br />
-              <span style={{ fontStyle: "italic", color: "var(--mute)" }}>
-                Robots tomorrow.
-              </span>
-            </div>
             <div
               style={{
                 marginTop: 48,

@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Docs:** [`docs/agent-zero-demo-script.md`](docs/agent-zero-demo-script.md) — hackathon demo talk track (purpose, problem metrics with sources appendix, user flow, architecture, **opBNB Testnet** / `.env.example` defaults table).
+
 - **API:** **`GET /api/v1/catalog/rules`** ([`backend/em_api/routes/catalog.py`](backend/em_api/routes/catalog.py)) — JSON discovery payload: **`openapi_docs`**, **`on_chain_categories`** (from shared **`CATEGORY_TO_UINT`** in [`chain.py`](backend/em_api/services/chain.py)), **`evidence_submit_field_names_by_category`** ([`evidence_schemas.py`](backend/em_api/services/evidence_schemas.py)). Stops **404** for clients that probe this path.
 
 ### Fixed
@@ -25,6 +27,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **API:** **`GET /api/v1/evidence-files/{evidence_item_id}`** ([`backend/em_api/routes/evidence_files.py`](backend/em_api/routes/evidence_files.py)) streams dev **placeholder** evidence from **`/tmp/em-evidence/{task_id}/{filename}`** so browsers can open uploads ( **`file://`** URLs from the placeholder uploader did not work from the Next.js origin). **`GET /api/v1/tasks/{task_id}`** returns **`evidence_items.id`** and rewrites **`file://`** **`greenfield_url`** values to **`{backend_public_url}/api/v1/evidence-files/{id}`**.
 
 ### Changed
+
+- **Frontend (landing `/`):** **[`LandingClient`](frontend/app/LandingClient.tsx)** “For builders” integration band `curl` sample uses **`getApiBase()`** + **`/api/v1/tasks`** (not placeholder MCP URL); **REST docs** opens **`{apiBase}/docs`** in a new tab.
 
 - **Docs:** Root [`README.md`](README.md) — product summary, architecture (Mermaid), features, flows, stack (**Privy** + wagmi), **opBNB Testnet** contract addresses (from [`.contracts.env`](.contracts.env)), quick start (**`GET /health`**), deployment guidance; **does not link** to files under **`docs/`**.
 
