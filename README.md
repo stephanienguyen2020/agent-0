@@ -10,42 +10,7 @@ This repo is a **hackathon MVP** with an end-to-end lifecycle, x402-style publis
 
 High-level data flow: browsers and HTTP agents call **FastAPI**; the API persists state in **Supabase**, optionally stores evidence on **Greenfield**, integrates **Gemini** and **World ID**, routes payments through the **x402 facilitator** (EIP-3009), and reads/writes **EMEscrow** / **MockUSDC** / **EMReputation** on **opBNB**.
 
-```mermaid
-flowchart TB
-  subgraph clients [Clients]
-    Web[Nextjs_Privy_wagmi]
-    Agent[HTTP_agents_CLI_workflow_demo]
-  end
-  subgraph api [Backend]
-    FastAPI[FastAPI_em_api]
-  end
-  subgraph services [Integrations]
-    Fac[x402_facilitator_EIP3009]
-    Gem[Gemini_L2_and_draft_chat]
-    WI[World_ID_HTTP]
-  end
-  subgraph data [Off_chain]
-    SB[(Supabase_Postgres)]
-    GF[Greenfield_evidence_optional]
-  end
-  subgraph chain [opBNB_Testnet_5611]
-    USDC[MockUSDC]
-    ESC[EMEscrow]
-    REP[EMReputation]
-  end
-  Web ==> FastAPI
-  Agent ==> FastAPI
-  FastAPI ==> SB
-  FastAPI ==> GF
-  FastAPI ==> ESC
-  FastAPI ==> USDC
-  FastAPI ==> REP
-  FastAPI ==> Fac
-  FastAPI ==> Gem
-  FastAPI ==> WI
-  Fac ==> ESC
-  Fac ==> USDC
-```
+![Architecture diagram](arc.png)
 
 ## Features
 
