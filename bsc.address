@@ -1,0 +1,48 @@
+{
+  "projectName": "Agent Zero",
+  "frontendUrl": "https://agent-zero-three-tau.vercel.app/",
+  "backendApi": "https://em-backend-production.up.railway.app",
+  "notes": "Escrow, MockUSDC, EM reputation, and arbitration contracts are deployed on opBNB Testnet (chain id 5611). Use testnet.opbnbscan for those addresses. The ERC-8004 Identity Registry reference address is on BSC Testnet (chain id 97); use testnet.bscscan. Align NEXT_PUBLIC_* and BACKEND_PUBLIC_URL with your deployed hosts. Addresses match .contracts.env / .env.example at time of commit; refresh after redeploy.",
+  "contracts": [
+    {
+      "name": "MockUSDC",
+      "network": "opBNB Testnet",
+      "chainId": 5611,
+      "address": "0xcd79afef5ec1d075e6c77d18ab6ea86c85186c38",
+      "explorerLink": "https://testnet.opbnbscan.com/address/0xcd79afef5ec1d075e6c77d18ab6ea86c85186c38",
+      "description": "Test USDC (micros) used with EMEscrow and publish flows."
+    },
+    {
+      "name": "EMEscrow",
+      "network": "opBNB Testnet",
+      "chainId": 5611,
+      "address": "0x67f6ac48650a019fead9c8da1c3a4ec6756d8fc2",
+      "explorerLink": "https://testnet.opbnbscan.com/address/0x67f6ac48650a019fead9c8da1c3a4ec6756d8fc2",
+      "description": "Task escrow and lifecycle (publish, accept, settle)."
+    },
+    {
+      "name": "EMReputation",
+      "network": "opBNB Testnet",
+      "chainId": 5611,
+      "address": "0xe0297fa6e24799746be8e3b7f567c10f4d569549",
+      "explorerLink": "https://testnet.opbnbscan.com/address/0xe0297fa6e24799746be8e3b7f567c10f4d569549",
+      "description": "On-chain reputation events for executors."
+    },
+    {
+      "name": "EMArbitration",
+      "network": "opBNB Testnet",
+      "chainId": 5611,
+      "address": "0x98444127f0ba2e4ce97a068478f44d0903988eb3",
+      "explorerLink": "https://testnet.opbnbscan.com/address/0x98444127f0ba2e4ce97a068478f44d0903988eb3",
+      "description": "Dispute arbitration scaffold (protocol-dependent)."
+    },
+    {
+      "name": "ERC8004_IdentityRegistry",
+      "network": "BSC Testnet",
+      "chainId": 97,
+      "address": "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+      "explorerLink": "https://testnet.bscscan.com/address/0x8004A818BFB912233c491871b3d84c89A494BD9e",
+      "description": "ERC-8004 identity registry reference (human/agent identity); verify if you use a custom deployment."
+    }
+  ]
+}
