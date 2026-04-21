@@ -15,38 +15,51 @@ High-level data flow: browsers and HTTP agents call **FastAPI**; the API persist
 ```mermaid
 flowchart TB
   subgraph clients [Clients]
-    Web[Nextjs_Privy_wagmi]
-    Agent[HTTP_agents_CLI_workflow_demo]
+    direction LR
+    Web["Next.js Privy wagmi<br/>Frontend app and wallet"]
+    Agent["CLI agents workflow_demo<br/>Automation and HTTP clients"]
   end
-  subgraph api [Backend]
-    FastAPI[FastAPI_em_api]
+
+  subgraph coreRow [Hub]
+    direction LR
+    subgraph integrations [Integrations]
+      direction TB
+      DGrid["DGrid<br/>L2 verify and Create with AI"]
+      WI["World ID<br/>Decentralized identity"]
+      Fac["x402 facilitator<br/>EIP-3009 settlement"]
+    end
+    FastAPI["FastAPI<br/>Central API and orchestration"]
+    SB[("Supabase Postgres<br/>Tasks agents metadata")]
   end
-  subgraph services [Integrations]
-    Fac[x402_facilitator_EIP3009]
-    DGrid["DGrid AI Gateway (L2 and chat)"]
-    WI[World_ID_HTTP]
+
+  subgraph onchainLayer [On-chain Layer]
+    subgraph bnbEco [BNB Chain Ecosystem]
+      direction LR
+      subgraph opbnb [opBNB Testnet 5611]
+        direction LR
+        USDC["MockUSDC<br/>Stablecoin"]
+        ESC["EMEscrow<br/>Escrow contract"]
+        REP["EMReputation<br/>Reputation"]
+      end
+      GF["BNB Greenfield<br/>Decentralized storage optional"]
+    end
   end
-  subgraph data [Off_chain]
-    SB[(Supabase_Postgres)]
-    GF[Greenfield_evidence_optional]
-  end
-  subgraph chain [opBNB_Testnet_5611]
-    USDC[MockUSDC]
-    ESC[EMEscrow]
-    REP[EMReputation]
-  end
-  Web ==> FastAPI
-  Agent ==> FastAPI
-  FastAPI ==> SB
-  FastAPI ==> GF
-  FastAPI ==> ESC
-  FastAPI ==> USDC
-  FastAPI ==> REP
-  FastAPI ==> Fac
-  FastAPI ==> DGrid
-  FastAPI ==> WI
-  Fac ==> ESC
-  Fac ==> USDC
+
+  Web --> FastAPI
+  Agent --> FastAPI
+  DGrid --> FastAPI
+  WI --> FastAPI
+  Fac --> FastAPI
+  FastAPI --> SB
+
+  FastAPI --> ESC
+  FastAPI --> GF
+  Fac --> USDC
+  Fac --> ESC
+  USDC <--> ESC
+  ESC <--> REP
+  REP --> GF
+  GF --> FastAPI
 ```
 
 ## Features
