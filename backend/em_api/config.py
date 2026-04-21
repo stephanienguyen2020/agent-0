@@ -1,6 +1,8 @@
 import re
 from pathlib import Path
 
+from typing import Literal
+
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -50,6 +52,43 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("GEMINI_CHAT_MODEL"),
     )
 
+    #: Verification L2: gemini | dgrid (Bearer gateway) | dgrid_x402 (pay-per-call, https://docs.dgrid.ai/x402).
+    verify_l2_provider: Literal["gemini", "dgrid", "dgrid_x402"] = Field(
+        default="gemini",
+        validation_alias=AliasChoices("VERIFY_L2_PROVIDER"),
+    )
+
+    #: Draft-chat + assistant-chat: gemini or dgrid gateway (distinct from VERIFY_L2_PROVIDER).
+    chat_llm_provider: Literal["gemini", "dgrid"] = Field(
+        default="gemini",
+        validation_alias=AliasChoices("CHAT_LLM_PROVIDER"),
+    )
+
+    dgrid_api_key: str = ""
+    dgrid_base_url: str = Field(
+        default="https://api.dgrid.ai/v1",
+        validation_alias=AliasChoices("DGRID_BASE_URL"),
+    )
+    dgrid_verify_model: str = Field(
+        default="openai/gpt-4o",
+        validation_alias=AliasChoices("DGRID_VERIFY_MODEL"),
+    )
+    #: When CHAT_LLM_PROVIDER=dgrid, model id for `/v1/chat/completions` (e.g. openai/gpt-4o).
+    dgrid_chat_model: str = Field(
+        default="openai/gpt-4o",
+        validation_alias=AliasChoices("DGRID_CHAT_MODEL"),
+    )
+
+    #: DGrid x402 inference endpoint (non-stream JSON). See https://docs.dgrid.ai/x402-api-reference
+    dgrid_x402_url: str = Field(
+        default="https://api.dgrid.ai/x402/v1",
+        validation_alias=AliasChoices("DGRID_X402_URL"),
+    )
+    #: Optional: retry a 402 challenge with this pre-built `x-payment` header (manual, tests, or external signer).
+    dgrid_x402_payment_header: str = Field(default="", validation_alias=AliasChoices("DGRID_X402_PAYMENT_HEADER"))
+    #: BSC (eip155:56) private key for automatic x402 signing when set (optional; requires funded USD1 + gas).
+    dgrid_x402_private_key: str = Field(default="", validation_alias=AliasChoices("DGRID_X402_PRIVATE_KEY"))
+
     @field_validator("gemini_api_key", mode="before")
     @classmethod
     def _normalize_gemini_api_key(cls, v: object) -> str:
@@ -59,6 +98,50 @@ class Settings(BaseSettings):
         s = str(v).strip().strip('"').strip("'")
         s = re.sub(r"[\u200b-\u200d\ufeff\u00a0]", "", s)
         return s.strip()
+
+    @field_validator("dgrid_api_key", mode="before")
+    @classmethod
+    def _normalize_dgrid_api_key(cls, v: object) -> str:
+        if v is None:
+            return ""
+        s = str(v).strip().strip('"').strip("'")
+        s = re.sub(r"[\u200b-\u200d\ufeff\u00a0]", "", s)
+        return s.strip()
+
+    @field_validator("verify_l2_provider", mode="before")
+    @classmethod
+    def _normalize_verify_l2_provider(
+        cls, v: object
+    ) -> Literal["gemini", "dgrid", "dgrid_x402"]:
+        s = str(v or "gemini").strip().lower()
+        if s == "dgrid":
+            return "dgrid"
+        if s in ("dgrid_x402", "x402", "dgrid-x402"):
+            return "dgrid_x402"
+        return "gemini"
+
+    @field_validator("chat_llm_provider", mode="before")
+    @classmethod
+    def _normalize_chat_llm_provider(cls, v: object) -> Literal["gemini", "dgrid"]:
+        s = str(v or "gemini").strip().lower()
+        if s == "dgrid":
+            return "dgrid"
+        return "gemini"
+
+    @field_validator("dgrid_x402_private_key", mode="before")
+    @classmethod
+    def _normalize_dgrid_x402_private_key(cls, v: object) -> str:
+        if v is None:
+            return ""
+        s = str(v).strip().strip('"').strip("'")
+        return re.sub(r"[\u200b-\u200d\ufeff\u00a0]", "", s).strip()
+
+    @field_validator("dgrid_x402_payment_header", mode="before")
+    @classmethod
+    def _normalize_dgrid_x402_payment_header(cls, v: object) -> str:
+        if v is None:
+            return ""
+        return str(v).strip()
 
     world_id_app_id: str = ""
     world_id_action: str = "register-executor"

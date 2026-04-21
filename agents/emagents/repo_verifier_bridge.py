@@ -29,5 +29,5 @@ if str(_REPO_ROOT) not in sys.path:
 from verifier.pipeline import run as run_verification_pipeline  # noqa: E402
 
 
-def run_pipeline(category: str, evidence: dict[str, Any], gemini_api_key: str | None) -> Any:
-    return run_verification_pipeline(category, evidence, gemini_api_key=gemini_api_key)
+def run_pipeline(category: str, evidence: dict[str, Any], gemini_api_key: str | None, **kwargs: Any) -> Any:
+    return run_verification_pipeline(category, evidence, gemini_api_key=gemini_api_key, **kwargs)

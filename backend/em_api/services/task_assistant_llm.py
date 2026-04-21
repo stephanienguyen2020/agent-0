@@ -21,6 +21,7 @@ from em_api.services.task_draft_llm import (
     apply_inferred_task_title,
     validate_task_draft_dict,
 )
+from em_api.services.dgrid_gateway import chat_completion as dgrid_chat_completion
 
 logger = logging.getLogger(__name__)
 
@@ -186,6 +187,52 @@ def _gemini_json_response(
         parsed = _parse_json_object(text)
     if not isinstance(parsed, dict):
         raise RuntimeError("gemini_unparseable")
+    return parsed
+
+
+def _gemini_style_contents_to_openai_messages(
+    contents: list[dict[str, Any]],
+    system_instruction: str,
+) -> list[dict[str, Any]]:
+    """Map Gemini-style contents (user/model + parts[].text) to OpenAI chat messages."""
+    msgs: list[dict[str, Any]] = [{"role": "system", "content": system_instruction}]
+    for block in contents:
+        role = block.get("role") or "user"
+        parts = block.get("parts") or []
+        txt = ""
+        if parts and isinstance(parts[0], dict):
+            txt = str(parts[0].get("text") or "")
+        orole = "assistant" if role == "model" else "user"
+        msgs.append({"role": orole, "content": txt})
+    return msgs
+
+
+def _dgrid_json_response(
+    *,
+    system_instruction: str,
+    contents: list[dict[str, Any]],
+    api_key: str,
+    base_url: str,
+    model: str,
+    http_referer: str | None,
+) -> dict[str, Any]:
+    """OpenAI-compatible chat completion; response must be a single JSON object in message content."""
+    oa = _gemini_style_contents_to_openai_messages(contents, system_instruction)
+    text = dgrid_chat_completion(
+        messages=oa,
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+        temperature=0.25,
+        timeout_sec=90,
+        http_referer=http_referer,
+    )
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        parsed = _parse_json_object(text)
+    if not isinstance(parsed, dict):
+        raise RuntimeError("dgrid_unparseable")
     return parsed
 
 
@@ -374,18 +421,169 @@ def _filter_pending_actions(supa: Any, wallet: str, actions: list[dict[str, Any]
     return kept
 
 
-def assistant_chat_turn(
+def assistant_chat_turn_dgrid(
+    *,
+    messages: list[dict[str, str]],
+    requester_wallet: str,
+    supa: Any,
+    api_key: str,
+    base_url: str,
+    model: str,
+    http_referer: str | None,
+) -> dict[str, Any]:
+    """DGrid Gateway path — same behavior as Gemini assistant (JSON tool loop, one round)."""
+    wallet = requester_wallet.strip()
+    if not wallet.startswith("0x"):
+        raise ValueError("invalid wallet")
+
+    schema = json.dumps(
+        {
+            "assistant_message": "string",
+            "needs_clarification": "boolean",
+            "draft": "object|null (task creation — same fields as draft-chat)",
+            "tool_calls": "array of {name: get_task|list_my_tasks, arguments: object}",
+            "pending_actions": "array of {type: approve_evidence|open_dispute|verify_release|accept_task, task_id, reason?}",
+        }
+    )
+
+    recent_tasks_block = _recent_tasks_context_for_wallet(supa, wallet)
+
+    system_1 = (
+        recent_tasks_block
+        + "\nYou are the Execution Market assistant on opBNB Testnet only. Never ask which chain.\n"
+        f"The user's wallet (requester context) is: {wallet}\n"
+        "Whenever you refer to a specific task from list_my_tasks, get_task, or the Recent tasks block above, "
+        "your natural-language answer MUST include that task's task_id (tk_…) so follow-up turns stay grounded.\n"
+        "For questions about acceptance, executor, who took the task, published vs accepted, or evidence detail, "
+        "call get_task with task_id resolved from the Recent tasks block above or from a tk_… in the thread — "
+        "list_my_tasks alone may omit executor_wallet; do not skip get_task when those fields matter.\n"
+        "Do not ask the user for a task id if the Recent tasks block or prior tool results already contain one "
+        "that matches the task they mean (e.g. only one recent task, or title matches).\n"
+        "When they ask about tasks, status, applicants, deadlines, or mention a tk_ id, use tool_calls:\n"
+        "- get_task: arguments {task_id}\n"
+        "- list_my_tasks: arguments {limit?: number}\n"
+        "When they want to create a market task, fill draft (categories: physical_presence, knowledge_access, "
+        "human_authority, agent_to_agent, simple_action) with bounty_usdc, instructions, title, etc.\n"
+        "Every draft MUST include a non-empty string field `title` (short headline), including when the user only "
+        "says yes/ok/proceed — same full draft object as the first proposal, never omit title.\n"
+        "When the user confirms task creation (e.g. yes, ok, proceed), you MUST include the complete draft object "
+        "in JSON — same shape as when first proposing the task — not prose-only; never ask them to review details "
+        "without including draft. For physical_presence, draft MUST include location_lat and location_lng "
+        "(use rough defaults if unspecified, e.g. city center).\n"
+        "When they clearly ask to approve evidence, open a dispute, run verify/release, or accept as executor, "
+        "add pending_actions with task_id from context or tools — do not invent task ids.\n"
+        "open_dispute must include non-empty reason (min 3 chars).\n"
+        "Reply with ONLY valid JSON matching: "
+        + schema
+    )
+
+    contents = []
+    for m in messages:
+        role = m.get("role", "user")
+        content = (m.get("content") or "").strip()
+        if not content:
+            continue
+        if role == "assistant":
+            contents.append({"role": "model", "parts": [{"text": content}]})
+        else:
+            contents.append({"role": "user", "parts": [{"text": content}]})
+
+    if not contents:
+        return {
+            "assistant_message": "Ask about your tasks (say list my tasks), a task id (tk_…), or describe a new task.",
+            "needs_clarification": True,
+            "draft": None,
+            "pending_actions": [],
+        }
+
+    parsed = _dgrid_json_response(
+        system_instruction=system_1,
+        contents=contents,
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+        http_referer=http_referer,
+    )
+
+    calls_list = _merge_executor_followup_get_task(
+        messages=messages,
+        supa=supa,
+        wallet=wallet,
+        parsed_tool_calls=parsed.get("tool_calls"),
+    )
+    if calls_list:
+        results = _execute_tool_calls(supa, wallet, calls_list)
+        follow = (
+            "Tool results (JSON):\n"
+            + json.dumps(results, default=str)[:12000]
+            + "\n\nWrite a concise assistant_message summarizing this for the user. "
+            "When naming a specific task from these results, include its task_id (tk_…) in the prose. "
+            "For acceptance, executor, or who accepted, base the answer on get_task results (executor_wallet, status); "
+            "do not ask the user for a task id if these results or the opening Recent tasks block already identify the task. "
+            "If they were creating or confirming a task, include the full draft object when the task is ready for "
+            "review or publish (same fields as draft-chat), including non-empty title; only use draft null when this turn is not about "
+            "task creation. Include pending_actions only if user intent matches. "
+            "Return ONLY JSON with keys assistant_message, needs_clarification, draft, pending_actions."
+        )
+        contents2 = contents + [{"role": "user", "parts": [{"text": follow}]}]
+        summarizer_si = (
+            recent_tasks_block
+            + "\nSummarize tool results; output JSON only with keys assistant_message, needs_clarification, draft, pending_actions. "
+            "Include tk_… when naming a concrete task. For executor/acceptance questions, use get_task fields from the tool JSON; "
+            "never ask the user for a task id when the Recent tasks block above or tool results already supply it. "
+            "If the user was creating a task, include the full draft when applicable, with a non-empty title string."
+        )
+        parsed = _dgrid_json_response(
+            system_instruction=summarizer_si,
+            contents=contents2,
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            http_referer=http_referer,
+        )
+
+    assistant_message = parsed.get("assistant_message")
+    if not isinstance(assistant_message, str) or not assistant_message.strip():
+        assistant_message = "I could not produce a reply. Try rephrasing."
+
+    needs_clarification = bool(parsed.get("needs_clarification", False))
+
+    draft_out: dict[str, Any] | None = None
+    draft_validation_error: str | None = None
+    raw_draft = parsed.get("draft")
+    if isinstance(raw_draft, dict):
+        normalized = apply_inferred_task_title(raw_draft)
+        vd, err = validate_task_draft_dict(normalized)
+        if vd is not None:
+            draft_out = vd
+        elif err:
+            draft_validation_error = err
+            logger.info("assistant draft validation failed: %s", err)
+
+    pending_raw = parsed.get("pending_actions")
+    pending_list: list[dict[str, Any]] = []
+    if isinstance(pending_raw, list):
+        pending_list = _filter_pending_actions(supa, wallet, [x for x in pending_raw if isinstance(x, dict)])
+
+    out: dict[str, Any] = {
+        "assistant_message": assistant_message.strip()[:12000],
+        "needs_clarification": needs_clarification,
+        "draft": draft_out,
+        "pending_actions": pending_list,
+    }
+    if draft_validation_error is not None:
+        out["draft_validation_error"] = draft_validation_error
+    return out
+
+
+def _assistant_chat_turn_gemini(
     *,
     messages: list[dict[str, str]],
     requester_wallet: str,
     supa: Any,
     api_key: str,
 ) -> dict[str, Any]:
-    """
-    Run assistant with optional tool loop (max one tool round), then validate draft/pending_actions.
-
-    Response keys align with frontend AssistantChatResponse.
-    """
+    """Gemini ``generateContent`` JSON mode — same contract as ``assistant_chat_turn_dgrid``."""
     wallet = requester_wallet.strip()
     if not wallet.startswith("0x"):
         raise ValueError("invalid wallet")
@@ -518,3 +716,42 @@ def assistant_chat_turn(
     if draft_validation_error is not None:
         out["draft_validation_error"] = draft_validation_error
     return out
+
+
+def assistant_chat_turn(
+    *,
+    messages: list[dict[str, str]],
+    requester_wallet: str,
+    supa: Any,
+    api_key: str | None = None,
+) -> dict[str, Any]:
+    """
+    Run assistant with optional tool loop (max one tool round), then validate draft/pending_actions.
+
+    Uses ``CHAT_LLM_PROVIDER``: ``gemini`` (default) or ``dgrid`` (OpenAI-compatible gateway).
+    """
+    from em_api.config import settings as _settings
+
+    if _settings.chat_llm_provider == "dgrid":
+        dk = _settings.dgrid_api_key.strip()
+        if not dk:
+            raise ValueError("missing_dgrid_api_key")
+        return assistant_chat_turn_dgrid(
+            messages=messages,
+            requester_wallet=requester_wallet,
+            supa=supa,
+            api_key=dk,
+            base_url=_settings.dgrid_base_url,
+            model=_settings.dgrid_chat_model,
+            http_referer=_settings.backend_public_url,
+        )
+
+    gk = (api_key or _settings.gemini_api_key or "").strip()
+    if not gk:
+        raise ValueError("missing_gemini_api_key")
+    return _assistant_chat_turn_gemini(
+        messages=messages,
+        requester_wallet=requester_wallet,
+        supa=supa,
+        api_key=gk,
+    )

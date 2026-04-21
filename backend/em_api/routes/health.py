@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends
 
+from em_api.config import settings
 from em_api.deps import get_chain, get_supabase
 
 router = APIRouter(tags=["health"])
@@ -17,7 +18,17 @@ def health(chain=Depends(get_chain)) -> dict:
             supa_status = "error"
     rpc = "ok" if chain.healthy() else "error"
     overall = "ok" if supa_status in ("ok", "skipped") and rpc == "ok" else "degraded"
-    return {"status": overall, "supabase": supa_status, "rpc_opbnb": rpc}
+    return {
+        "status": overall,
+        "supabase": supa_status,
+        "rpc_opbnb": rpc,
+        "llm": {
+            "chat_provider": settings.chat_llm_provider,
+            "verify_l2_provider": settings.verify_l2_provider,
+            "gemini_api_key_configured": bool((settings.gemini_api_key or "").strip()),
+            "dgrid_api_key_configured": bool((settings.dgrid_api_key or "").strip()),
+        },
+    }
 
 
 @router.get("/version")

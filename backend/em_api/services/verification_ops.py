@@ -151,7 +151,21 @@ def process_verify_for_task(
     ev_dict = evidence_dict_from_items(category, items)
 
     gemini_key = settings.gemini_api_key.strip() if settings.gemini_api_key else None
-    pipeline = run_pipeline(category, ev_dict, gemini_key)
+    dgrid_key = settings.dgrid_api_key.strip() if settings.dgrid_api_key else None
+    x402_hdr = (settings.dgrid_x402_payment_header or "").strip() or None
+    x402_pk = (settings.dgrid_x402_private_key or "").strip() or None
+    pipeline = run_pipeline(
+        category,
+        ev_dict,
+        gemini_key,
+        l2_provider=settings.verify_l2_provider,
+        dgrid_api_key=dgrid_key,
+        dgrid_base_url=settings.dgrid_base_url,
+        dgrid_verify_model=settings.dgrid_verify_model,
+        dgrid_x402_url=settings.dgrid_x402_url,
+        dgrid_x402_payment_header=x402_hdr,
+        dgrid_x402_private_key=x402_pk,
+    )
     if not pipeline.passed:
         supa.table("verifications").insert(
             {

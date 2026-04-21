@@ -398,3 +398,117 @@ def draft_chat_gemini(
     result["draft"] = validated
     result["needs_clarification"] = False
     return result
+
+
+def draft_chat_dgrid(
+    *,
+    messages: list[dict[str, str]],
+    api_key: str,
+    base_url: str,
+    model: str,
+    http_referer: str | None,
+) -> dict[str, Any]:
+    """
+    Same JSON contract as ``draft_chat_gemini`` via DGrid OpenAI-compatible chat completions.
+    """
+    from em_api.services.dgrid_gateway import chat_completion
+
+    schema_hint = json.dumps(
+        {
+            "assistant_message": "string — short reply to the user",
+            "needs_clarification": "boolean",
+            "draft": "object|null with keys: title, instructions, category, bounty_usdc (number), "
+            "deadline_at (ISO 8601 UTC optional), location_lat, location_lng, location_radius_m optional",
+        }
+    )
+    system = (
+        "You help users draft tasks for the Execution Market on opBNB Testnet only — never ask which chain. "
+        "Categories (exact snake_case values): physical_presence, knowledge_access, human_authority, "
+        "agent_to_agent, simple_action. "
+        "Use physical_presence when the task requires someone at a place (photo, visit); include "
+        "location_lat, location_lng (decimal degrees) and location_radius_m (meters, default 5000). "
+        "Bounty is in USDC (mock testnet token); use bounty_usdc as a decimal number (e.g. 0.05). "
+        "If the user did not specify a deadline, omit deadline_at (server defaults to 24h from now). "
+        "When you have enough information to publish, set needs_clarification false and fill draft; "
+        "otherwise needs_clarification true and draft null. "
+        "Reply with ONLY valid JSON matching this shape: "
+        f"{schema_hint}"
+    )
+
+    oa_messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
+    for m in messages:
+        role = m.get("role", "user")
+        content = (m.get("content") or "").strip()
+        if not content:
+            continue
+        if role == "assistant":
+            oa_messages.append({"role": "assistant", "content": content})
+        else:
+            oa_messages.append({"role": "user", "content": content})
+
+    if len(oa_messages) <= 1:
+        return {
+            "assistant_message": "Send a message describing the task you want posted.",
+            "needs_clarification": True,
+            "draft": None,
+        }
+
+    try:
+        text = chat_completion(
+            messages=oa_messages,
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            temperature=0.3,
+            timeout_sec=60,
+            http_referer=http_referer,
+        )
+    except RuntimeError:
+        raise
+
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        parsed = _parse_json_object(text)
+    if not isinstance(parsed, dict):
+        raise RuntimeError("dgrid_unparseable")
+
+    assistant_message = parsed.get("assistant_message")
+    if not isinstance(assistant_message, str) or not assistant_message.strip():
+        assistant_message = "I could not parse that. Try describing the task, bounty in USDC, and what you need done."
+
+    needs_clarification = bool(parsed.get("needs_clarification", True))
+    draft_raw = parsed.get("draft")
+
+    result: dict[str, Any] = {
+        "assistant_message": assistant_message.strip()[:8000],
+        "needs_clarification": needs_clarification,
+        "draft": None,
+    }
+
+    if draft_raw is None or not isinstance(draft_raw, dict):
+        return result
+
+    validated, err = validate_task_draft_dict(draft_raw)
+    if validated is None:
+        logger.debug("draft validation failed: %s", err)
+        hints: dict[str, str] = {
+            "missing_title": "Ask for a short title for the task.",
+            "missing_instructions": "Ask what exactly the worker should deliver.",
+            "invalid_category": "Ask which type fits best: physical presence, knowledge access, "
+            "human authority, agent-to-agent, or simple action.",
+            "invalid_bounty": "Ask for a bounty amount in USDC (greater than zero).",
+            "deadline_too_soon": "Choose a deadline at least a few minutes from now.",
+            "deadline_too_far": "Deadline cannot be more than 30 days ahead; suggest a shorter window.",
+            "physical_needs_location": "For an on-location task, ask which city or coordinates apply.",
+            "invalid_location": "Location values look invalid; ask for city or lat/lng.",
+            "invalid_lat_lng": "Latitude/longitude must be valid.",
+        }
+        extra = hints.get(err or "", "Ask for any missing details.")
+        result["assistant_message"] = (result["assistant_message"] + " " + extra).strip()[:8000]
+        result["needs_clarification"] = True
+        return result
+
+    result["draft"] = validated
+    result["needs_clarification"] = False
+    return result

@@ -34,7 +34,7 @@ from em_api.services.verification_ops import (
 )
 from em_api.services.chain import AcceptTaskRejected, ESCROW_TASK_STATUS_ACCEPTED, PreflightRejected
 from em_api.services.task_assistant_llm import assistant_chat_turn
-from em_api.services.task_draft_llm import draft_chat_gemini
+from em_api.services.task_draft_llm import draft_chat_dgrid, draft_chat_gemini
 from em_api.services.x402_facilitator import settle_payment
 
 logger = logging.getLogger(__name__)
@@ -285,20 +285,39 @@ def draft_chat(body: DraftChatRequest) -> dict[str, Any]:
     """
     Turn conversational messages into a validated task draft (no chain / wallet actions).
 
-    Requires GEMINI_API_KEY on the API server.
+    Uses ``CHAT_LLM_PROVIDER``: ``gemini`` (``GEMINI_API_KEY``) or ``dgrid`` (``DGRID_API_KEY``).
     """
-    key = (settings.gemini_api_key or "").strip()
-    if not key:
-        raise HTTPException(
-            503,
-            "GEMINI_API_KEY is not configured on the API server; task drafting is unavailable.",
-        )
     msgs: list[dict[str, str]] = []
     for m in body.messages:
         role = m.role.strip().lower()
         if role not in ("user", "assistant"):
             role = "user"
         msgs.append({"role": role, "content": m.content.strip()})
+    if settings.chat_llm_provider == "dgrid":
+        dk = settings.dgrid_api_key.strip()
+        if not dk:
+            raise HTTPException(
+                503,
+                "DGRID_API_KEY is not configured on the API server; set CHAT_LLM_PROVIDER=gemini "
+                "or add DGRID_API_KEY for DGrid draft-chat.",
+            )
+        try:
+            return draft_chat_dgrid(
+                messages=msgs,
+                api_key=dk,
+                base_url=settings.dgrid_base_url,
+                model=settings.dgrid_chat_model,
+                http_referer=settings.backend_public_url,
+            )
+        except RuntimeError as e:
+            raise HTTPException(502, detail=str(e)) from e
+
+    key = (settings.gemini_api_key or "").strip()
+    if not key:
+        raise HTTPException(
+            503,
+            "GEMINI_API_KEY is not configured on the API server; task drafting is unavailable.",
+        )
     try:
         return draft_chat_gemini(messages=msgs, api_key=key)
     except RuntimeError as e:
@@ -310,14 +329,8 @@ def assistant_chat(body: AssistantChatRequest) -> dict[str, Any]:
     """
     Unified assistant: task Q&A (tools), optional create-task draft, pending_actions for client-side txs.
 
-    Requires GEMINI_API_KEY and Supabase. Pass the connected wallet as requester_wallet.
+    Uses ``CHAT_LLM_PROVIDER`` (``gemini`` + ``GEMINI_API_KEY`` or ``dgrid`` + ``DGRID_API_KEY``). Requires Supabase.
     """
-    key = (settings.gemini_api_key or "").strip()
-    if not key:
-        raise HTTPException(
-            503,
-            "GEMINI_API_KEY is not configured on the API server; assistant is unavailable.",
-        )
     supa = get_supabase()
     if not supa:
         raise HTTPException(503, "Supabase not configured")
@@ -332,16 +345,22 @@ def assistant_chat(body: AssistantChatRequest) -> dict[str, Any]:
     except Exception as e:
         raise HTTPException(400, "invalid requester_wallet") from e
     try:
-        return assistant_chat_turn(
-            messages=msgs,
-            requester_wallet=w,
-            supa=supa,
-            api_key=key,
-        )
+        return assistant_chat_turn(messages=msgs, requester_wallet=w, supa=supa)
     except RuntimeError as e:
         raise HTTPException(502, detail=str(e)) from e
     except ValueError as e:
-        raise HTTPException(400, str(e)) from e
+        msg = str(e)
+        if msg == "missing_dgrid_api_key":
+            raise HTTPException(
+                503,
+                "DGRID_API_KEY is not configured; set CHAT_LLM_PROVIDER=gemini or add DGRID_API_KEY.",
+            ) from e
+        if msg == "missing_gemini_api_key":
+            raise HTTPException(
+                503,
+                "GEMINI_API_KEY is not configured on the API server; assistant is unavailable.",
+            ) from e
+        raise HTTPException(400, msg) from e
 
 
 @router.post("")

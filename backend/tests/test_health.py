@@ -29,3 +29,8 @@ def test_health_ok(client: TestClient):
     assert body["supabase"] == "skipped"
     assert body["rpc_opbnb"] == "ok"
     assert body["status"] == "ok"
+    llm = body["llm"]
+    assert llm["chat_provider"] in ("gemini", "dgrid")
+    assert llm["verify_l2_provider"] in ("gemini", "dgrid", "dgrid_x402")
+    assert "gemini_api_key_configured" in llm
+    assert "dgrid_api_key_configured" in llm
